@@ -37,7 +37,7 @@ export function PriceChart({ symbol, basePrice }: { symbol: string; basePrice: n
   const seed = symbol.charCodeAt(0) + symbol.charCodeAt(1);
 
   const mockHistory = useMemo<HistoryPoint[]>(
-    () => generatePriceHistory(basePrice, range.days, seed),
+    () => (basePrice > 0 ? generatePriceHistory(basePrice, range.days, seed) : []),
     [basePrice, range.days, seed],
   );
   const [history, setHistory] = useState<HistoryPoint[]>(mockHistory);
@@ -110,6 +110,9 @@ export function PriceChart({ symbol, basePrice }: { symbol: string; basePrice: n
       </div>
 
       <div className="h-[360px] w-full">
+        {data.length === 0 ? (
+          <div className="skeleton h-full w-full rounded-2xl" />
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 12, right: 20, left: 4, bottom: 0 }}>
             <CartesianGrid stroke="#eef1ee" vertical={false} />
@@ -153,6 +156,7 @@ export function PriceChart({ symbol, basePrice }: { symbol: string; basePrice: n
             />
           </ComposedChart>
         </ResponsiveContainer>
+        )}
       </div>
 
       <div className="flex items-start gap-2 rounded-xl bg-(--color-surface-2) p-3 text-[12.5px] text-(--color-fg-muted)">

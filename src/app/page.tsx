@@ -1,7 +1,9 @@
 import { MarketingNav } from "@/components/layout/MarketingNav";
-import { Hero } from "@/components/landing/Hero";
-import { Features } from "@/components/landing/Features";
-import { Stats } from "@/components/landing/Stats";
+import { CinematicHero } from "@/components/landing/CinematicHero";
+import { TickerTape } from "@/components/landing/TickerTape";
+import { MarketPulse } from "@/components/landing/MarketPulse";
+import { FeatureCinema } from "@/components/landing/FeatureCinema";
+import { StatsBand } from "@/components/landing/StatsBand";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { FAQ } from "@/components/landing/FAQ";
 import { CtaBanner } from "@/components/landing/CtaBanner";
@@ -10,15 +12,20 @@ import { Footer } from "@/components/landing/Footer";
 export default function LandingPage() {
   return (
     <main className="bg-(--color-bg)">
-      <div className="gradient-brand-soft relative overflow-hidden">
+      {/* Dark cinematic region: nav, hero, live tape, horizontal market glide */}
+      <div className="gradient-brand-soft noise relative overflow-clip">
         <div className="absolute inset-0 grid-mask pointer-events-none" />
         <div className="relative">
           <MarketingNav />
-          <Hero />
+          <CinematicHero />
+          <TickerTape />
+          <MarketPulse />
         </div>
       </div>
-      <Features />
-      <Stats />
+
+      {/* Light editorial region */}
+      <FeatureCinema />
+      <StatsBand />
       <Testimonials />
       <FAQ />
       <CtaBanner />

@@ -22,12 +22,21 @@ export function StockHeader({ symbol, name, sector, basePrice }: { symbol: strin
       </div>
       <div className="text-right">
         <LiveDot className="justify-end" />
-        <p className="mt-2 text-[38px] font-semibold tracking-tight tabular text-(--color-fg) sm:text-[44px]">
-          ₹{formatINR(tick.price, { decimals: 2 })}
-        </p>
-        <div className="mt-1">
-          <DeltaValue value={tick.change} pct={tick.changePct} className="text-[14px]" />
-        </div>
+        {tick.price > 0 ? (
+          <>
+            <p className="mt-2 text-[38px] font-semibold tracking-tight tabular text-(--color-fg) sm:text-[44px]">
+              ₹{formatINR(tick.price, { decimals: 2 })}
+            </p>
+            <div className="mt-1">
+              <DeltaValue value={tick.change} pct={tick.changePct} className="text-[14px]" />
+            </div>
+          </>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <span className="skeleton block h-10 w-44" />
+            <span className="skeleton block h-4 w-28" />
+          </div>
+        )}
       </div>
     </header>
   );

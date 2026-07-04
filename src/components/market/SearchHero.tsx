@@ -4,27 +4,18 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, CornerDownLeft, Sparkles } from "lucide-react";
-import { NIFTY_50 } from "@/lib/mock-data";
+import { searchUniverse, instrumentHref } from "@/lib/universe";
 
 export function SearchHero() {
   const [q, setQ] = useState("");
   const [focus, setFocus] = useState(false);
   const router = useRouter();
 
-  const results = useMemo(() => {
-    if (!q.trim()) return [];
-    const lower = q.toLowerCase();
-    return NIFTY_50.filter(
-      (s) =>
-        s.symbol.toLowerCase().includes(lower) ||
-        s.name.toLowerCase().includes(lower) ||
-        s.sector.toLowerCase().includes(lower),
-    ).slice(0, 6);
-  }, [q]);
+  const results = useMemo(() => searchUniverse(q, 7), [q]);
 
   function submit() {
     const top = results[0];
-    if (top) router.push(`/stocks/${top.symbol}`);
+    if (top) router.push(instrumentHref(top.symbol));
   }
 
   return (
@@ -38,7 +29,7 @@ export function SearchHero() {
             onFocus={() => setFocus(true)}
             onBlur={() => setTimeout(() => setFocus(false), 120)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="Search a stock by symbol, name or sector — e.g. INFY, Reliance, Banking"
+            placeholder="Search 2,350+ stocks & 325+ ETFs — e.g. INFY, Zomato, gold ETF"
             className="flex-1 bg-transparent text-[15.5px] text-(--color-fg) placeholder:text-(--color-fg-subtle) focus:outline-none"
           />
           <span className="hidden items-center gap-1.5 rounded-md border border-(--color-border) bg-(--color-surface-2) px-2 py-1 text-[11px] font-medium text-(--color-fg-subtle) sm:inline-flex">
@@ -50,14 +41,19 @@ export function SearchHero() {
             {results.map((r) => (
               <li key={r.symbol}>
                 <Link
-                  href={`/stocks/${r.symbol}`}
+                  href={instrumentHref(r.symbol)}
                   className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-(--color-surface-2)"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[13.5px] font-semibold tracking-tight text-(--color-fg)">{r.symbol}</p>
-                    <p className="text-[11.5px] text-(--color-fg-subtle)">{r.name} • {r.sector}</p>
+                    <p className="truncate text-[11.5px] text-(--color-fg-subtle)">
+                      {r.name}
+                      {r.industry ? ` • ${r.industry}` : ""}
+                    </p>
                   </div>
-                  <span className="text-[12px] tabular text-(--color-fg-muted)">₹{r.basePrice.toFixed(2)}</span>
+                  <span className="shrink-0 rounded-full border border-(--color-border) bg-(--color-surface-2) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-(--color-fg-muted)">
+                    {r.kind === "etf" ? "ETF" : r.inNifty50 ? "Nifty 50" : "NSE"}
+                  </span>
                 </Link>
               </li>
             ))}

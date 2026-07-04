@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getQuote, getQuotes, type Quote } from "@/lib/api/yahoo";
+import { getQuote, getSparkQuotes, type SparkQuote } from "@/lib/api/yahoo";
 
 export type Tick = { price: number; change: number; changePct: number };
 
@@ -58,6 +58,7 @@ export function useLivePrice(symbol: string, basePrice: number, volatility = 0.0
   useEffect(() => {
     const id = setInterval(() => {
       const { price, prevClose } = anchorRef.current;
+      if (price <= 0) return; // no anchor yet (unknown symbol) — wait for a real quote
       setTick(jitter(price, prevClose, volatility));
     }, JITTER_MS);
     return () => clearInterval(id);
@@ -96,7 +97,7 @@ export function useLivePrices(stocks: Array<{ symbol: string; basePrice: number 
     async function pull() {
       const syms = stocksRef.current.map((s) => s.symbol);
       if (syms.length === 0) return;
-      const quotes: Record<string, Quote> = await getQuotes(syms);
+      const quotes: Record<string, SparkQuote> = await getSparkQuotes(syms);
       if (cancelled) return;
       setPrices((prev) => {
         const next: Record<string, Tick> = { ...prev };
@@ -128,6 +129,7 @@ export function useLivePrices(stocks: Array<{ symbol: string; basePrice: number 
         const next: Record<string, Tick> = { ...prev };
         for (const s of stocksRef.current) {
           const anchor = anchorsRef.current[s.symbol] ?? { price: s.basePrice, prevClose: s.basePrice };
+          if (anchor.price <= 0) continue; // keep waiting for a real quote
           next[s.symbol] = jitter(anchor.price, anchor.prevClose, 0.0025);
         }
         return next;

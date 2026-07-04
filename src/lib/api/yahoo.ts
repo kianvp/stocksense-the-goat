@@ -166,3 +166,94 @@ export async function getQuotes(symbols: string[]): Promise<Record<string, Quote
   for (const [s, q] of results) if (q) out[s] = q;
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Batched quotes via the spark endpoint (up to ~20 symbols per request, no
+// crumb/auth needed). Preferred for ticker bars and long lists.
+
+export type SparkQuote = Quote & {
+  name?: string;
+  volume?: number;
+  /** Intraday close series for sparklines. */
+  spark: number[];
+};
+
+type SparkResponse = {
+  spark: {
+    result?: Array<{
+      symbol: string;
+      response?: YahooChartResult[];
+    }>;
+  };
+};
+
+const SPARK_CHUNK = 20;
+const SPARK_TTL_MS = 20_000;
+const sparkCache = new Map<string, CacheEntry<SparkQuote>>();
+
+type SparkMetaExtra = {
+  shortName?: string;
+  longName?: string;
+  regularMarketVolume?: number;
+};
+
+function parseSparkResult(inputSymbol: string, result: YahooChartResult): SparkQuote {
+  const { quote, candles } = parseChart(inputSymbol, result);
+  const meta = result.meta as YahooChartResult["meta"] & SparkMetaExtra;
+  return {
+    ...quote,
+    name: meta.longName ?? meta.shortName,
+    volume: meta.regularMarketVolume,
+    spark: candles.map((c) => c.price),
+  };
+}
+
+async function fetchSparkChunk(symbols: string[]): Promise<Record<string, SparkQuote>> {
+  const bySym = new Map(symbols.map((s) => [yahooSymbol(s), s]));
+  const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(
+    Array.from(bySym.keys()).join(","),
+  )}&range=1d&interval=15m&includePrePost=false`;
+  const out: Record<string, SparkQuote> = {};
+  try {
+    const r = await fetchProxied(url);
+    const json: SparkResponse = await r.json();
+    for (const item of json.spark.result ?? []) {
+      const original = bySym.get(item.symbol);
+      const result = item.response?.[0];
+      if (!original || !result) continue;
+      const parsed = parseSparkResult(original, result);
+      sparkCache.set(item.symbol, { at: Date.now(), value: parsed });
+      out[original] = parsed;
+    }
+  } catch {
+    // swallow — callers fall back to whatever they have
+  }
+  return out;
+}
+
+/**
+ * Live quotes for many symbols at once. Chunks of 20 per request, cached for
+ * ~20s. Missing symbols (delisted/unavailable on Yahoo) are simply absent.
+ */
+export async function getSparkQuotes(symbols: string[]): Promise<Record<string, SparkQuote>> {
+  const out: Record<string, SparkQuote> = {};
+  const misses: string[] = [];
+  for (const s of symbols) {
+    const cached = sparkCache.get(yahooSymbol(s));
+    if (cached && Date.now() - cached.at < SPARK_TTL_MS) out[s] = cached.value;
+    else misses.push(s);
+  }
+  if (misses.length === 0) return out;
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < misses.length; i += SPARK_CHUNK) chunks.push(misses.slice(i, i + SPARK_CHUNK));
+
+  // Cap concurrency so a 200-symbol page doesn't slam the proxy.
+  const MAX_PARALLEL = 4;
+  for (let i = 0; i < chunks.length; i += MAX_PARALLEL) {
+    const batch = chunks.slice(i, i + MAX_PARALLEL);
+    const results = await Promise.all(batch.map((c) => once(`spark:${c.join(",")}`, () => fetchSparkChunk(c))));
+    for (const r of results) Object.assign(out, r);
+  }
+  return out;
+}
