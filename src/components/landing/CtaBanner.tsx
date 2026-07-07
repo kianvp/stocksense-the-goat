@@ -5,6 +5,7 @@ export function CtaBanner() {
   return (
     <section className="mx-auto max-w-7xl px-5 py-24">
       <div className="relative overflow-hidden rounded-[28px] gradient-brand p-10 sm:p-16">
+        <div className="particle-dust pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
         <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-(--color-brand-400)/20 blur-3xl" />
         <div className="absolute -left-20 -bottom-24 h-72 w-72 rounded-full bg-(--color-brand-300)/10 blur-3xl" />
         <div className="relative max-w-2xl">

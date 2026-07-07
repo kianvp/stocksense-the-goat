@@ -85,7 +85,7 @@ export function MarketPulse() {
       >
         <div ref={headerRef} className="mx-auto w-full max-w-7xl px-5" style={{ willChange: "opacity" }}>
           <p className="text-[11px] uppercase tracking-[0.22em] font-semibold text-(--color-brand-300)">
-            Market pulse
+            Live screens
           </p>
           <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.03em] text-white sm:text-5xl">
             Glide through the market.

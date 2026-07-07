@@ -39,7 +39,7 @@ export function FAQ() {
           <p className="text-[11.5px] font-semibold uppercase tracking-[0.18em] text-(--color-brand-700)">
             Questions, answered
           </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[42px] sm:leading-[1.08]">
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] sm:text-[48px] sm:leading-[1.05]">
             Frequently asked.
           </h2>
         </div>

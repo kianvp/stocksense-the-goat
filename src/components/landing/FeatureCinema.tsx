@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useReveal, useInCenter, useStableCallback } from "@/lib/use-reveal";
+import { SpotlightCard } from "@/components/ui/SpotlightCard";
 
 const FEATURES = [
   {
@@ -154,13 +155,12 @@ function Frame({ children, shown, innerRef }: { children: React.ReactNode; shown
   return (
     <div
       ref={innerRef}
-      className={cn(
-        "overflow-hidden rounded-3xl border border-(--color-border) bg-(--color-surface) p-6 shadow-(--shadow-lg)",
-        shown !== undefined && "reveal",
-        shown && "reveal-shown",
-      )}
+      className={cn(shown !== undefined && "reveal", shown && "reveal-shown")}
+      style={{ perspective: "1100px" }}
     >
-      {children}
+      <SpotlightCard className="overflow-hidden rounded-3xl border border-(--color-border) bg-(--color-surface) p-6 shadow-(--shadow-lg)">
+        {children}
+      </SpotlightCard>
     </div>
   );
 }

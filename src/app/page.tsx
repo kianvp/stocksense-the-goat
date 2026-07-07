@@ -3,6 +3,7 @@ import { CinematicHero } from "@/components/landing/CinematicHero";
 import { TickerTape } from "@/components/landing/TickerTape";
 import { MarketPulse } from "@/components/landing/MarketPulse";
 import { FeatureCinema } from "@/components/landing/FeatureCinema";
+import { MarketPulse3D } from "@/components/landing/MarketPulse3D";
 import { StatsBand } from "@/components/landing/StatsBand";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { FAQ } from "@/components/landing/FAQ";
@@ -25,6 +26,10 @@ export default function LandingPage() {
 
       {/* Light editorial region */}
       <FeatureCinema />
+
+      {/* Dark centrepiece: draggable market globe */}
+      <MarketPulse3D />
+
       <StatsBand />
       <Testimonials />
       <FAQ />
