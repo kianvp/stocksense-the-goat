@@ -1,0 +1,13 @@
+{
+  // Deploy StockSense as a static-assets Worker (NOT OpenNext/SSR).
+  // `npm run build` produces a static export in ./out (output: "export"),
+  // and this config uploads that folder directly — no server bundle.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stocksense-the-goat",
+  "compatibility_date": "2026-07-08",
+  "assets": {
+    "directory": "./out",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

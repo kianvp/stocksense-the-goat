@@ -11,28 +11,41 @@ No code changes are needed: `next.config.ts` already builds root-relative when
 
 ---
 
-## Part 1 — Host on Cloudflare Pages
+## Part 1 — Host on Cloudflare
 
-1. Create a free account at <https://dash.cloudflare.com> (no card needed for Pages).
-2. **Workers & Pages → Create → Pages → Connect to Git.**
-3. Authorize GitHub and select **`kianvp/stocksense-the-goat`**.
-4. Build settings:
-   - **Framework preset:** `None`  *(do NOT pick the Next.js preset — that tries SSR; we ship a static export)*
+The repo ships a **`wrangler.jsonc`** that deploys the static export in `./out`
+as plain static assets. This overrides Cloudflare's "Next.js" auto-detection,
+which otherwise tries the OpenNext SSR adapter and fails (our app is
+`output: "export"`, so there is no server bundle).
+
+1. Create a free account at <https://dash.cloudflare.com> (no card needed).
+2. **Workers & Pages → Create → Pages → Connect to Git**, authorize GitHub,
+   select **`kianvp/stocksense-the-goat`**.
+3. Build settings:
    - **Build command:** `npm run build`
+   - **Deploy command:** `npx wrangler deploy`  *(reads `wrangler.jsonc` → uploads `./out`)*
    - **Build output directory:** `out`
-5. **Environment variables** (add under Production *and* Preview). Use the same
-   values you already stored as GitHub Actions secrets — do **not** paste real
-   keys into this file or any committed file:
+4. **Build environment variables** (these are baked into the JS at build time,
+   so they must be *build* variables, not runtime secrets). Use the same values
+   you stored as GitHub Actions secrets — never paste real keys into a committed
+   file:
    | Name | Value |
    | --- | --- |
    | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | *(your Google OAuth client ID, ends `.apps.googleusercontent.com`)* |
    | `NEXT_PUBLIC_FINNHUB_KEY` | *(your Finnhub key)* |
    | `NEXT_PUBLIC_GEMINI_KEY` | *(your Gemini key)* |
-   | `NODE_VERSION` | `20` |
-6. **Save and Deploy.** You'll get `https://stocksense-the-goat.pages.dev`.
-7. In **Google Cloud Console → APIs & Services → Credentials → your OAuth client**,
-   add to **Authorized JavaScript origins**:
-   `https://stocksense-the-goat.pages.dev`
+   | `NODE_VERSION` | `22` |
+5. **Save and Deploy.** You'll get a `*.workers.dev` or `*.pages.dev` URL.
+6. In **Google Cloud Console → APIs & Services → Credentials → your OAuth client**,
+   add that URL to **Authorized JavaScript origins**.
+
+> Wrangler needs **Node 22+**, so set `NODE_VERSION=22` (Node 20 works for the
+> Next build but wrangler's deploy step refuses it).
+
+> If Cloudflare still tries the OpenNext/SSR path, delete the project and create
+> a **Pages** project (not Workers): same repo, build command `npm run build`,
+> output directory `out`, framework preset **None** — classic Pages serves
+> `out/` statically and ignores `wrangler.jsonc`.
 
 At this point the site is live on Cloudflare — but still public. Part 2 locks it.
 
