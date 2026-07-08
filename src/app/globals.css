@@ -197,6 +197,14 @@ button, a, [role="button"], input, select, textarea {
   .spark-fill { opacity: 1; transition: none; }
 }
 
+@keyframes hero-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-576px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="hero-drift"] { animation: none !important; }
+}
+
 @keyframes scroll-cue {
   0%, 100% { transform: translateY(0); opacity: 0.9; }
   50% { transform: translateY(7px); opacity: 0.4; }

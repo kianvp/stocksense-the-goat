@@ -3,9 +3,9 @@ import { CinematicHero } from "@/components/landing/CinematicHero";
 import { TickerTape } from "@/components/landing/TickerTape";
 import { MarketPulse } from "@/components/landing/MarketPulse";
 import { FeatureCinema } from "@/components/landing/FeatureCinema";
-import { MarketPulse3D } from "@/components/landing/MarketPulse3D";
+import { QuantEngine } from "@/components/landing/QuantEngine";
 import { StatsBand } from "@/components/landing/StatsBand";
-import { Testimonials } from "@/components/landing/Testimonials";
+import { Principles } from "@/components/landing/Principles";
 import { FAQ } from "@/components/landing/FAQ";
 import { CtaBanner } from "@/components/landing/CtaBanner";
 import { Footer } from "@/components/landing/Footer";
@@ -27,11 +27,11 @@ export default function LandingPage() {
       {/* Light editorial region */}
       <FeatureCinema />
 
-      {/* Dark centrepiece: draggable market globe */}
-      <MarketPulse3D />
+      {/* Dark centrepiece: live technical-analysis engine showing its math */}
+      <QuantEngine />
 
       <StatsBand />
-      <Testimonials />
+      <Principles />
       <FAQ />
       <CtaBanner />
       <Footer />

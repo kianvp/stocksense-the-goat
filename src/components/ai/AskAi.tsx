@@ -75,9 +75,17 @@ function findKnownSymbol(text: string): string | undefined {
   return NIFTY_50.find((s) => upper.includes(s.symbol))?.symbol;
 }
 
+// Gemini's response is rendered straight into `/stocks/[symbol]` links, so
+// only accept strings that actually look like a ticker before trusting them.
+const SAFE_TICKER = /^[A-Z0-9]{1,15}$/;
+
+function isSafeTicker(s: string): boolean {
+  return SAFE_TICKER.test(s);
+}
+
 async function hydrateStockCard(answer: GeminiAnswer): Promise<Rich["stock"] | undefined> {
   const sym = answer.symbol?.toUpperCase();
-  if (!sym) return undefined;
+  if (!sym || !isSafeTicker(sym)) return undefined;
   const known = NIFTY_50.find((s) => s.symbol === sym);
   const name = known?.name ?? sym;
   const quote = await getQuote(sym);
@@ -154,7 +162,7 @@ export function AskAi() {
           bullets: answer.bullets,
           opportunities: answer.opportunities,
           risks: answer.risks,
-          related: answer.related,
+          related: answer.related?.map((s) => s.toUpperCase()).filter(isSafeTicker),
         },
       };
     }

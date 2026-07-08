@@ -1,15 +1,11 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import dynamic from "next/dynamic";
 import { ArrowRight, Sparkles, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { HeroPreview } from "./HeroPreview";
+import { HeroBackdrop } from "./HeroBackdrop";
 import { useScrollDriver } from "@/lib/use-section-progress";
-
-// WebGL particle backdrop — loads client-side only; the CSS orbs below stay
-// as the reduced-motion / no-WebGL fallback.
-const HeroCanvas = dynamic(() => import("./three/HeroCanvas"), { ssr: false });
 
 const HEADLINE = ["The", "entire", "Indian", "market,"];
 const HEADLINE_ACCENT = ["alive", "on", "one", "screen."];
@@ -53,8 +49,8 @@ export function CinematicHero() {
         className="absolute top-[30%] right-[4%] -z-10 h-[380px] w-[380px] rounded-full bg-(--color-brand-300)/10 blur-3xl"
       />
 
-      {/* Particle field (sits above orbs, below content) */}
-      <HeroCanvas />
+      {/* Live market backdrop (sits above orbs, below content) */}
+      <HeroBackdrop />
 
       <div className="mx-auto max-w-7xl px-5 pt-14 pb-24 sm:pt-20 md:pt-24">
         <div className="grid items-center gap-14 lg:grid-cols-[1.08fr_1fr] lg:gap-16">

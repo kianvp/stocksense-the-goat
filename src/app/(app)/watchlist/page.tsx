@@ -22,7 +22,11 @@ export default function WatchlistPage() {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setSymbols(JSON.parse(raw));
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.every((s) => typeof s === "string")) {
+        setSymbols(parsed);
+      }
     } catch {}
   }, []);
 

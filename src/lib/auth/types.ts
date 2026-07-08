@@ -4,6 +4,8 @@ export type AuthUser = {
   name: string;
   picture: string;
   givenName?: string;
+  /** Unix seconds — expiry of the Google ID token this session was created from. */
+  exp: number;
 };
 
 export type GoogleCredentialResponse = {

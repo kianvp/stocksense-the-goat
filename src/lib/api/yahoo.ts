@@ -89,8 +89,13 @@ type YahooChartResult = {
   indicators: { quote: Array<{ close?: (number | null)[] }> };
 };
 
-function parseChart(symbol: string, result: YahooChartResult): { quote: Quote; candles: Candle[] } {
+function parseChart(symbol: string, result: YahooChartResult): { quote: Quote; candles: Candle[] } | null {
   const meta = result.meta;
+  // A tampered/misbehaving CORS proxy can return malformed JSON that still
+  // parses — guard against garbage prices propagating into the UI and P&L math.
+  if (typeof meta?.regularMarketPrice !== "number" || !Number.isFinite(meta.regularMarketPrice)) {
+    return null;
+  }
   const prev = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
   const price = meta.regularMarketPrice;
   const change = price - prev;
@@ -139,6 +144,7 @@ export async function getChart(
       const result = json.chart.result?.[0];
       if (!result) return null;
       const parsed = parseChart(symbol, result);
+      if (!parsed) return null;
       chartCache.set(key, { at: Date.now(), value: parsed });
       return parsed;
     } catch {
@@ -197,8 +203,10 @@ type SparkMetaExtra = {
   regularMarketVolume?: number;
 };
 
-function parseSparkResult(inputSymbol: string, result: YahooChartResult): SparkQuote {
-  const { quote, candles } = parseChart(inputSymbol, result);
+function parseSparkResult(inputSymbol: string, result: YahooChartResult): SparkQuote | null {
+  const parsed = parseChart(inputSymbol, result);
+  if (!parsed) return null;
+  const { quote, candles } = parsed;
   const meta = result.meta as YahooChartResult["meta"] & SparkMetaExtra;
   return {
     ...quote,
@@ -222,6 +230,7 @@ async function fetchSparkChunk(symbols: string[]): Promise<Record<string, SparkQ
       const result = item.response?.[0];
       if (!original || !result) continue;
       const parsed = parseSparkResult(original, result);
+      if (!parsed) continue;
       sparkCache.set(item.symbol, { at: Date.now(), value: parsed });
       out[original] = parsed;
     }

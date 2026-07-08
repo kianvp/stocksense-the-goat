@@ -85,20 +85,21 @@ export function PortfolioApp() {
     } catch {}
   }, [state]);
 
-  const livePrices = useLivePrices(state.positions.map((p) => {
-    const s = NIFTY_50.find((x) => x.symbol === p.symbol)!;
-    return { symbol: p.symbol, basePrice: s.basePrice };
+  const livePrices = useLivePrices(state.positions.flatMap((p) => {
+    const s = NIFTY_50.find((x) => x.symbol === p.symbol);
+    return s ? [{ symbol: p.symbol, basePrice: s.basePrice }] : [];
   }));
 
   const enrichedPositions = useMemo(() => {
-    return state.positions.map((p) => {
-      const stock = NIFTY_50.find((x) => x.symbol === p.symbol)!;
+    return state.positions.flatMap((p) => {
+      const stock = NIFTY_50.find((x) => x.symbol === p.symbol);
+      if (!stock) return [];
       const current = livePrices[p.symbol]?.price ?? stock.basePrice;
       const invested = p.avgPrice * p.shares;
       const value = current * p.shares;
       const pl = value - invested;
       const plPct = invested ? (pl / invested) * 100 : 0;
-      return { ...p, stock, current, invested, value, pl, plPct };
+      return [{ ...p, stock, current, invested, value, pl, plPct }];
     });
   }, [state.positions, livePrices]);
 
@@ -163,7 +164,8 @@ export function PortfolioApp() {
     setState((prev) => {
       const pos = prev.positions.find((p) => p.symbol === symbol);
       if (!pos) return prev;
-      const live = livePrices[symbol]?.price ?? NIFTY_50.find((s) => s.symbol === symbol)!.basePrice;
+      const live =
+        livePrices[symbol]?.price ?? NIFTY_50.find((s) => s.symbol === symbol)?.basePrice ?? pos.avgPrice;
       const proceeds = pos.shares * live;
       return {
         ...prev,
