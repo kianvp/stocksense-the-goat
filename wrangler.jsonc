@@ -1,12 +1,16 @@
 {
-  // Deploy StockSense as a static-assets Worker (NOT OpenNext/SSR).
-  // `npm run build` produces a static export in ./out (output: "export"),
-  // and this config uploads that folder directly — no server bundle.
+  // StockSense on Cloudflare Workers (free plan, no card).
+  // `npm run build` produces a static export in ./out (output: "export").
+  // The Worker in ./worker/index.ts runs in FRONT of those assets and enforces
+  // Google sign-in server-side — nothing is served without a valid session.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "stocksense-the-goat",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-07-08",
   "assets": {
     "directory": "./out",
+    "binding": "ASSETS",
+    "run_worker_first": true,
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   }

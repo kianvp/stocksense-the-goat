@@ -1,90 +1,59 @@
-# Deploy behind a real sign-in wall (Cloudflare Pages + Access)
+# Real sign-in enforcement on Cloudflare Workers (free, no credit card)
 
-The GitHub Pages build serves the site to everyone — the in-app Google gate
-only hides the UI. To *enforce* sign-in (nobody sees anything until they log
-in), host the same repo on **Cloudflare Pages** and put **Cloudflare Access**
-in front of it. Free for up to 50 users.
+The site is a static export (`output: "export"` → `./out`) deployed as a
+Cloudflare **Worker with static assets**. A small Worker (`worker/index.ts`)
+runs *in front of* those files and refuses to serve anything without a valid
+signed session. Sign-in is Google, verified **server-side**, so the app's
+HTML/JS never reaches an unauthenticated visitor. This is genuine enforcement
+and costs nothing — the Workers free plan needs no card (unlike Cloudflare
+Access / Zero Trust, which does).
 
-No code changes are needed: `next.config.ts` already builds root-relative when
-`GITHUB_ACTIONS` is not set (which is the case on Cloudflare), so the export in
-`out/` works at the root of a `*.pages.dev` domain.
+## How it works
 
----
+- `run_worker_first: true` makes the Worker handle **every** request.
+- No valid `ss_session` cookie → the Worker returns a Google sign-in page.
+- On sign-in, the browser posts the Google ID token to `/__auth`. The Worker
+  verifies it against Google, checks the audience (your client ID), then sets:
+  - `ss_session` — HttpOnly, HMAC-signed, 7 days. The actual gate.
+  - `ss_id` — readable identity so the app greets the user without a 2nd login.
+- `/__logout` clears both cookies.
 
-## Part 1 — Host on Cloudflare
+## One-time setup in the Cloudflare dashboard
 
-The repo ships a **`wrangler.jsonc`** that deploys the static export in `./out`
-as plain static assets. This overrides Cloudflare's "Next.js" auto-detection,
-which otherwise tries the OpenNext SSR adapter and fails (our app is
-`output: "export"`, so there is no server bundle).
+Your project already builds. You only need to add **three Worker variables** and
+make sure the deploy command is `npx wrangler deploy`.
 
-1. Create a free account at <https://dash.cloudflare.com> (no card needed).
-2. **Workers & Pages → Create → Pages → Connect to Git**, authorize GitHub,
-   select **`kianvp/stocksense-the-goat`**.
-3. Build settings:
-   - **Build command:** `npm run build`
-   - **Deploy command:** `npx wrangler deploy`  *(reads `wrangler.jsonc` → uploads `./out`)*
-   - **Build output directory:** `out`
-4. **Build environment variables** (these are baked into the JS at build time,
-   so they must be *build* variables, not runtime secrets). Use the same values
-   you stored as GitHub Actions secrets — never paste real keys into a committed
-   file:
+1. **Project → Settings → Variables and Secrets** — add (type: *Secret* for the
+   secret ones):
    | Name | Value |
    | --- | --- |
-   | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | *(your Google OAuth client ID, ends `.apps.googleusercontent.com`)* |
-   | `NEXT_PUBLIC_FINNHUB_KEY` | *(your Finnhub key)* |
-   | `NEXT_PUBLIC_GEMINI_KEY` | *(your Gemini key)* |
-   | `NODE_VERSION` | `22` |
-5. **Save and Deploy.** You'll get a `*.workers.dev` or `*.pages.dev` URL.
-6. In **Google Cloud Console → APIs & Services → Credentials → your OAuth client**,
-   add that URL to **Authorized JavaScript origins**.
+   | `GOOGLE_CLIENT_ID` | your Google OAuth client ID (ends `.apps.googleusercontent.com`) |
+   | `SESSION_SECRET` | a long random string — e.g. run `openssl rand -hex 32` |
+   | `ALLOWED_EMAILS` | *(optional)* comma-separated emails allowed in; leave unset to allow any Google account |
 
-> Wrangler needs **Node 22+**, so set `NODE_VERSION=22` (Node 20 works for the
-> Next build but wrangler's deploy step refuses it).
+   > These are **runtime** Worker variables (used by `worker/index.ts`), separate
+   > from the `NEXT_PUBLIC_*` **build** variables the site's JS uses. Keep both.
 
-> If Cloudflare still tries the OpenNext/SSR path, delete the project and create
-> a **Pages** project (not Workers): same repo, build command `npm run build`,
-> output directory `out`, framework preset **None** — classic Pages serves
-> `out/` statically and ignores `wrangler.jsonc`.
+2. **Settings → Build**
+   - Build command: `npm run build`
+   - Deploy command: `npx wrangler deploy`
+   - `NODE_VERSION` = `22`
 
-At this point the site is live on Cloudflare — but still public. Part 2 locks it.
+3. **Google Cloud Console → Credentials → your OAuth client → Authorized
+   JavaScript origins** — add your Worker URL (e.g. `https://stocksense-the-goat.<subdomain>.workers.dev`).
+   This lets the Google button render on the sign-in page.
 
----
+4. **Retry deployment.**
 
-## Part 2 — Turn on Cloudflare Access (the sign-in wall)
+## Test it
 
-> Heads-up: activating **Zero Trust** is $0 for the Free plan (50 users), but
-> Cloudflare may ask you to put a **card on file** during onboarding. You are
-> not charged on the Free plan. If you refuse any card on file, skip Access and
-> ask me for the Worker-only route instead.
+- Open the site in a private window → you should see the **StockSense sign-in
+  page**, not the app.
+- Sign in with Google → the app loads.
+- The account menu's **Sign out** hits `/__logout` and drops you back to the wall.
 
-1. Cloudflare dashboard → **Zero Trust** (left sidebar).
-2. Pick a team name (e.g. `stocksense`) → choose the **Free** plan.
-3. **Settings → Authentication → Login methods → Add new → Google.**
-   Cloudflare shows a redirect URL like
-   `https://<team>.cloudflareaccess.com/cdn-cgi/access/callback`.
-   - In Google Cloud Console, create a **second** OAuth client (type: Web app),
-     paste that redirect URL into **Authorized redirect URIs**, and copy its
-     **Client ID + Client Secret** back into Cloudflare. Save, then **Test**.
-4. **Access → Applications → Add an application → Self-hosted.**
-   - **Application name:** StockSense
-   - **Application domain:** `stocksense-the-goat.pages.dev`
-5. **Add a policy:**
-   - **Action:** Allow
-   - **Include:** either *Emails* → your address (just you), or
-     *Login Methods* → Google (anyone with a Google account), or
-     *Emails ending in* → `@gmail.com`.
-6. Save. Done.
+## Rollback
 
-Now visiting `stocksense-the-goat.pages.dev` forces the Cloudflare login first —
-static files included. Unauthenticated users get nothing.
-
----
-
-## After it works
-
-- Turn off the old GitHub Pages deploy if you want a single source of truth:
-  repo **Settings → Pages → Source → None** (or delete `.github/workflows/nextjs.yml`).
-- The in-app Google button still works for the personalized greeting/watchlist.
-  Optionally I can wire the app to read the signed-in identity straight from
-  Access (`/cdn-cgi/access/get-identity`) so users only log in once — ask me.
+If anything misbehaves, revert to a public static site by removing `"main"` and
+the `binding`/`run_worker_first` lines from `wrangler.jsonc` (leaving just
+`assets.directory`), and redeploy.

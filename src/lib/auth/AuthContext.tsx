@@ -25,6 +25,30 @@ function isExpired(u: AuthUser): boolean {
   return typeof u.exp !== "number" || u.exp * 1000 <= Date.now();
 }
 
+// The Cloudflare Worker gate sets a base64url `ss_id` cookie with the verified
+// identity. Decode it so the app treats a Worker-authenticated visitor as
+// signed in without a second in-app prompt.
+function readIdentityCookie(): AuthUser | null {
+  try {
+    const match = document.cookie.split("; ").find((c) => c.startsWith("ss_id="));
+    if (!match) return null;
+    const raw = match.slice("ss_id=".length);
+    if (!raw) return null;
+    const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(b64)
+        .split("")
+        .map((ch) => "%" + ch.charCodeAt(0).toString(16).padStart(2, "0"))
+        .join(""),
+    );
+    const parsed = JSON.parse(json) as AuthUser;
+    if (!parsed.email) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
@@ -32,10 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-  // Hydrate from localStorage — drop the session if the underlying ID token
-  // has already expired instead of trusting it indefinitely.
+  // Hydrate the session. When the site is served behind the Cloudflare Worker
+  // gate, the Worker has already verified the Google login server-side and set
+  // a readable `ss_id` identity cookie — trust that first so users aren't asked
+  // to sign in twice. Otherwise fall back to a localStorage session.
   useEffect(() => {
     try {
+      const fromCookie = readIdentityCookie();
+      if (fromCookie && !isExpired(fromCookie)) {
+        setUser(fromCookie);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fromCookie));
+        return;
+      }
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as AuthUser;
@@ -103,6 +135,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     persist(null);
+    // Behind the Worker gate, also drop the server session — otherwise a
+    // reload just re-reads the identity cookie and signs back in.
+    if (typeof document !== "undefined" && document.cookie.includes("ss_id=")) {
+      window.location.href = "/__logout";
+    }
   }, [persist]);
 
   const _setCredential = useCallback(
