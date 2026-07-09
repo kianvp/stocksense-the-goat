@@ -1,7 +1,15 @@
-// Yahoo Finance client. No key. Routed through corsproxy.io because Yahoo's
-// public endpoints don't set Access-Control-Allow-Origin for browsers.
+// Yahoo Finance client. No key. Yahoo doesn't send CORS headers for browsers,
+// so requests are routed through a proxy. On Cloudflare our own Worker proxies
+// server-side (same-origin, reliable); off-Cloudflare (local dev, GitHub Pages)
+// we fall back to public CORS proxies.
 
-const PROXIES = [
+const PROXIES: Array<(u: string) => string> = [
+  // Same-origin Worker proxy — first choice when present. 404s elsewhere,
+  // which makes fetchProxied fall through to the public proxies below.
+  (u: string) =>
+    typeof window !== "undefined"
+      ? `${window.location.origin}/__proxy?u=${encodeURIComponent(u)}`
+      : `https://corsproxy.io/?${encodeURIComponent(u)}`,
   (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
 ];

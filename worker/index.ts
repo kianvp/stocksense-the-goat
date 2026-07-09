@@ -26,6 +26,11 @@ export default {
     if (url.pathname === "/__logout") {
       return logout(url);
     }
+    // Same-origin market-data proxy (public): fetch Yahoo/Finnhub server-side so
+    // the browser isn't blocked by CORS or flaky third-party proxies.
+    if (url.pathname === "/__proxy") {
+      return handleProxy(url);
+    }
 
     // Only the app is members-only. The marketing homepage and shared static
     // assets stay public so visitors can see the site before signing in.
@@ -153,6 +158,49 @@ function logout(url: URL): Response {
   headers.append("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; ${expired}`);
   headers.append("Set-Cookie", `${IDENTITY_COOKIE}=; ${expired}`);
   return new Response(null, { status: 302, headers });
+}
+
+/* ---------------------------------------------------- market-data proxy */
+
+// Allowlisted upstreams only — this is a scoped proxy, not an open one.
+const PROXY_HOSTS = new Set([
+  "query1.finance.yahoo.com",
+  "query2.finance.yahoo.com",
+  "finnhub.io",
+]);
+
+async function handleProxy(url: URL): Promise<Response> {
+  const target = url.searchParams.get("u");
+  if (!target) return new Response("missing u", { status: 400 });
+  let t: URL;
+  try {
+    t = new URL(target);
+  } catch {
+    return new Response("bad url", { status: 400 });
+  }
+  if (t.protocol !== "https:" || !PROXY_HOSTS.has(t.hostname)) {
+    return new Response("host not allowed", { status: 403 });
+  }
+  try {
+    const upstream = await fetch(t.toString(), {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
+        accept: "application/json,text/plain,*/*",
+      },
+    });
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        "content-type": upstream.headers.get("content-type") || "application/json",
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=5",
+      },
+    });
+  } catch {
+    return new Response("upstream error", { status: 502 });
+  }
 }
 
 /* ------------------------------------------------------------------- crypto */
