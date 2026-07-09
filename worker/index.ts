@@ -4,10 +4,13 @@
 // against Google, then a short HMAC-signed session cookie is issued. Real
 // enforcement — the app's HTML/JS is never sent to an unauthenticated visitor.
 
+import { BUILD_SECRET } from "./secret.generated";
+
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   GOOGLE_CLIENT_ID: string;
-  SESSION_SECRET: string;
+  /** Optional stable secret. If unset, the build-baked BUILD_SECRET is used. */
+  SESSION_SECRET?: string;
   /** Optional comma-separated allowlist. Empty = any Google account. */
   ALLOWED_EMAILS?: string;
 }
@@ -15,6 +18,12 @@ interface Env {
 const SESSION_COOKIE = "ss_session"; // HttpOnly, signed — the actual gate
 const IDENTITY_COOKIE = "ss_id"; // readable by the app so it knows who's in
 const TTL = 60 * 60 * 24 * 7; // 7 days
+
+// Prefer a stable operator-provided secret; otherwise fall back to the secret
+// baked into this build (server-side only, rotates each deploy).
+function sessionSecret(env: Env): string {
+  return env.SESSION_SECRET || BUILD_SECRET;
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -89,10 +98,6 @@ async function handleAuth(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleAuthInner(request: Request, env: Env): Promise<Response> {
-  if (!env.SESSION_SECRET) {
-    return json({ error: "Sign-in isn't configured yet: SESSION_SECRET is missing." }, 500);
-  }
-
   let credential: string | undefined;
   try {
     const body = (await request.json()) as { credential?: string };
@@ -125,7 +130,7 @@ async function handleAuthInner(request: Request, env: Env): Promise<Response> {
 
   const exp = Math.floor(Date.now() / 1000) + TTL;
   const payload = `${email}|${exp}`;
-  const sig = await hmac(payload, env.SESSION_SECRET);
+  const sig = await hmac(payload, sessionSecret(env));
   const token = `${strToB64url(payload)}.${sig}`;
   const identity = strToB64url(
     JSON.stringify({
@@ -158,7 +163,7 @@ async function getValidSession(request: Request, env: Env): Promise<{ email: str
   } catch {
     return null;
   }
-  const expected = await hmac(payload, env.SESSION_SECRET);
+  const expected = await hmac(payload, sessionSecret(env));
   if (!timingSafeEqual(sig, expected)) return null;
   const [email, expStr] = payload.split("|");
   const exp = parseInt(expStr, 10);
