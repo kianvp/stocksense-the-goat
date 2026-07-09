@@ -27,12 +27,40 @@ export default {
       return logout(url);
     }
 
-    const session = await getValidSession(request, env);
-    if (!session) return loginPage(env);
+    // Only the app is members-only. The marketing homepage and shared static
+    // assets stay public so visitors can see the site before signing in.
+    if (isGated(url.pathname)) {
+      const session = await getValidSession(request, env);
+      if (!session) return loginPage(env, url);
+    }
 
     return env.ASSETS.fetch(request);
   },
 };
+
+// App routes that require a signed-in session. Everything else (the landing
+// page "/", favicon, /_next assets, etc.) is served without auth.
+const GATED_PREFIXES = [
+  "/dashboard",
+  "/market",
+  "/stocks",
+  "/etfs",
+  "/portfolio",
+  "/watchlist",
+  "/ask-ai",
+  "/news",
+  "/glossary",
+  "/buy-stocks",
+  "/recently-viewed",
+  "/quote",
+  "/quant",
+];
+
+function isGated(pathname: string): boolean {
+  return GATED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p + "."),
+  );
+}
 
 /* ---------------------------------------------------------------- auth flow */
 
@@ -185,7 +213,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function loginPage(env: Env): Response {
+function loginPage(env: Env, _url?: URL): Response {
   const html = LOGIN_HTML.replace(/__CLIENT_ID__/g, escapeHtml(env.GOOGLE_CLIENT_ID || ""));
   return new Response(html, {
     status: 401,
