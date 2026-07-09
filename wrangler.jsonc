@@ -7,6 +7,13 @@
   "name": "stocksense-the-goat",
   "main": "worker/index.ts",
   "compatibility_date": "2026-07-08",
+  // The Google client_id is public (it ships in the login page), so it lives
+  // here in config — dashboard "vars" get wiped by `wrangler deploy`, which was
+  // blanking the sign-in button. SESSION_SECRET stays a dashboard *Secret*
+  // (secrets survive deploys) — do not put it here.
+  "vars": {
+    "GOOGLE_CLIENT_ID": "441028625957-8j3d2tccugfnuoc11mbjedttrqqgdqf9.apps.googleusercontent.com"
+  },
   "assets": {
     "directory": "./out",
     "binding": "ASSETS",
