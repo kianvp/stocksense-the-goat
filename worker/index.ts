@@ -79,6 +79,20 @@ interface TokenInfo {
 }
 
 async function handleAuth(request: Request, env: Env): Promise<Response> {
+  try {
+    return await handleAuthInner(request, env);
+  } catch (e) {
+    // Never let an exception fall through as a raw 500 (which the login page
+    // reports as a useless "network error") — surface the reason as JSON.
+    return json({ error: "server error: " + (e instanceof Error ? e.message : String(e)) }, 500);
+  }
+}
+
+async function handleAuthInner(request: Request, env: Env): Promise<Response> {
+  if (!env.SESSION_SECRET) {
+    return json({ error: "Sign-in isn't configured yet: SESSION_SECRET is missing." }, 500);
+  }
+
   let credential: string | undefined;
   try {
     const body = (await request.json()) as { credential?: string };
