@@ -27,7 +27,13 @@ export type Quote = {
   fiftyTwoWeekLow?: number;
 };
 
-export type Candle = { time: number; price: number };
+export type Candle = {
+  time: number;
+  price: number; // close
+  open?: number;
+  high?: number;
+  low?: number;
+};
 
 export type ChartRange = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y";
 export type ChartInterval = "1m" | "5m" | "15m" | "30m" | "1h" | "1d" | "1wk";
@@ -94,7 +100,14 @@ type YahooChartResult = {
     fiftyTwoWeekLow?: number;
   };
   timestamp?: number[];
-  indicators: { quote: Array<{ close?: (number | null)[] }> };
+  indicators: {
+    quote: Array<{
+      close?: (number | null)[];
+      open?: (number | null)[];
+      high?: (number | null)[];
+      low?: (number | null)[];
+    }>;
+  };
 };
 
 function parseChart(symbol: string, result: YahooChartResult): { quote: Quote; candles: Candle[] } | null {
@@ -121,12 +134,22 @@ function parseChart(symbol: string, result: YahooChartResult): { quote: Quote; c
     fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
   };
   const ts = result.timestamp ?? [];
-  const closes = result.indicators.quote[0]?.close ?? [];
+  const q0 = result.indicators.quote[0] ?? {};
+  const closes = q0.close ?? [];
+  const opens = q0.open ?? [];
+  const highs = q0.high ?? [];
+  const lows = q0.low ?? [];
   const candles: Candle[] = [];
   for (let i = 0; i < ts.length; i++) {
     const c = closes[i];
     if (c == null) continue;
-    candles.push({ time: ts[i] * 1000, price: c });
+    candles.push({
+      time: ts[i] * 1000,
+      price: c,
+      open: opens[i] ?? undefined,
+      high: highs[i] ?? undefined,
+      low: lows[i] ?? undefined,
+    });
   }
   return { quote, candles };
 }

@@ -220,6 +220,15 @@ button, a, [role="button"], input, select, textarea {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* Glassmorphism card (quant pipeline) */
+.glass {
+  background: color-mix(in srgb, var(--color-surface) 68%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+  box-shadow: 0 8px 32px -16px rgba(13, 31, 23, 0.12);
+}
+
 /* Faint particle-dust texture (CTA banner, footer, canvas fallbacks) */
 .particle-dust {
   background-image:
