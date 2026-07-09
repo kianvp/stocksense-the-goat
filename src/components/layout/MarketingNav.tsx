@@ -16,7 +16,7 @@ const links = [
 
 export function MarketingNav() {
   const [open, setOpen] = useState(false);
-  const { user, openSignIn } = useAuth();
+  const { user } = useAuth();
   return (
     <header className="sticky top-0 z-40 w-full">
       <div className="mx-auto max-w-7xl px-5 py-4">
@@ -40,16 +40,18 @@ export function MarketingNav() {
               </Button>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={openSignIn}
+                <a
+                  href="/dashboard/"
                   className="inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-medium text-white hover:bg-white/10"
                 >
                   Sign in
-                </button>
-                <Button href="/dashboard" size="sm" className="bg-white text-(--color-brand-900) hover:bg-white/90 shadow-none">
+                </a>
+                <a
+                  href="/dashboard/"
+                  className="inline-flex h-9 items-center rounded-xl bg-white px-3.5 text-sm font-medium text-(--color-brand-900) hover:bg-white/90"
+                >
                   Get started
-                </Button>
+                </a>
               </>
             )}
           </div>
@@ -77,19 +79,18 @@ export function MarketingNav() {
                   </Button>
                 ) : (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpen(false);
-                        openSignIn();
-                      }}
+                    <a
+                      href="/dashboard/"
                       className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-white/20 px-3.5 text-sm font-medium text-white"
                     >
                       Sign in
-                    </button>
-                    <Button href="/dashboard" size="sm" className="w-full bg-white text-(--color-brand-900) shadow-none">
+                    </a>
+                    <a
+                      href="/dashboard/"
+                      className="inline-flex h-9 w-full items-center justify-center rounded-xl bg-white px-3.5 text-sm font-medium text-(--color-brand-900)"
+                    >
                       Get started
-                    </Button>
+                    </a>
                   </>
                 )}
               </div>
