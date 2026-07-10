@@ -39,7 +39,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <h1 className="mt-5 text-[24px] font-semibold tracking-[-0.02em]">Sign in to continue</h1>
             <p className="mt-2 text-[14px] leading-relaxed text-white/60">
               StockSense is a members-only workspace. Sign in with Google to open the dashboard,
-              live markets, portfolio simulator, and AI research.
+              live markets, portfolio tracker, and AI research.
             </p>
 
             <button

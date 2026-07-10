@@ -29,7 +29,7 @@ export default function DashboardPage() {
             <Greeting fallbackName="there" />
           </h1>
           <p className="mt-2 max-w-xl text-[15px] text-white/70">
-            Track live Nifty 50 prices, analyse trends, simulate your portfolio and get AI insights — all in one place.
+            Track live Nifty 50 prices, analyse trends, follow your portfolio and get AI insights — all in one place.
           </p>
 
           <div className="mt-7 max-w-3xl">
@@ -168,12 +168,13 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Your virtual portfolio</CardTitle>
+              <CardTitle>My portfolio</CardTitle>
             </CardHeader>
-            <p className="text-[28px] font-semibold tabular tracking-tight">₹5,12,484</p>
-            <p className="mt-1 text-[13px] tabular font-medium text-(--color-up)">+₹12,484 (+2.49%) today</p>
+            <p className="text-[14.5px] leading-relaxed text-(--color-fg-muted)">
+              Add the stocks you already own and track live value, P&amp;L and sector allocation.
+            </p>
             <Button href="/portfolio" variant="outline" size="sm" className="mt-5 w-full">
-              Open simulator <ArrowRight className="h-3.5 w-3.5" />
+              Open portfolio <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </Card>
         </div>

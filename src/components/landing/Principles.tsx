@@ -26,8 +26,8 @@ const PRINCIPLES = [
   },
   {
     icon: Wallet,
-    title: "Practise before you risk",
-    body: "A ₹5,00,000 virtual portfolio lets you test ideas at live prices with zero money on the line — until you're ready to use a real broker.",
+    title: "Your portfolio, on your device",
+    body: "Log the holdings you already own and watch live value and P&L. The data stays in your browser — we can't trade with it, and we never sell it.",
   },
 ];
 

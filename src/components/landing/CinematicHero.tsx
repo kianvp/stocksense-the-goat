@@ -91,8 +91,8 @@ export function CinematicHero() {
               style={{ animationDelay: "550ms" }}
             >
               Every listed NSE stock and ETF with live prices, institutional-grade charts,
-              an AI research copilot, and a ₹5,00,000 virtual portfolio to practise on.
-              Calm, fast, and built for Indian investors.
+              an AI research copilot, head-to-head stock comparison, and live tracking for
+              the portfolio you already own. Calm, fast, and built for Indian investors.
             </p>
 
             <div
@@ -114,7 +114,7 @@ export function CinematicHero() {
             >
               <Stat value="2,350+" label="NSE stocks" />
               <Stat value="325+" label="ETFs live" />
-              <Stat value="₹5L" label="Virtual cash" />
+              <Stat value="Live" label="Portfolio P&L" />
             </dl>
           </div>
 
