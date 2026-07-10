@@ -13,7 +13,7 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { Plus, Wallet, TrendingUp, ChartPie, X } from "lucide-react";
+import { Plus, Wallet, ChartPie, Trash2, TrendingUp } from "lucide-react";
 import { Card, CardEyebrow } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -23,11 +23,12 @@ import { useLivePrices } from "@/lib/use-live-prices";
 import { NIFTY_50 } from "@/lib/mock-data";
 import { formatINR } from "@/lib/format";
 
-const STARTING_CASH = 500000;
-const STORAGE_KEY = "stocksense.portfolio.v1";
+const STORAGE_KEY = "stocksense.holdings.v1";
 
-type Position = { symbol: string; shares: number; avgPrice: number };
-type State = { cash: number; positions: Position[]; valueTrend: { t: number; v: number }[] };
+// A holding you already own in real life. avgPrice is your own average cost —
+// you can't buy stock on StockSense, so you log what you hold and we track it.
+type Holding = { symbol: string; shares: number; avgPrice: number; addedAt: number };
+type State = { holdings: Holding[]; valueTrend: { t: number; v: number }[] };
 
 const SECTOR_COLORS: Record<string, string> = {
   Banking: "#115e3c",
@@ -48,33 +49,35 @@ const SECTOR_COLORS: Record<string, string> = {
   Consumer: "#d2eadb",
 };
 
+const EMPTY: State = { holdings: [], valueTrend: [] };
+
 function loadState(): State {
-  if (typeof window === "undefined") return { cash: STARTING_CASH, positions: [], valueTrend: [] };
+  if (typeof window === "undefined") return EMPTY;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { cash: STARTING_CASH, positions: [], valueTrend: [] };
+    if (!raw) return EMPTY;
     const parsed = JSON.parse(raw) as State;
     return {
-      cash: typeof parsed.cash === "number" ? parsed.cash : STARTING_CASH,
-      positions: Array.isArray(parsed.positions) ? parsed.positions : [],
+      holdings: Array.isArray(parsed.holdings)
+        ? parsed.holdings.filter(
+            (h) => h && typeof h.symbol === "string" && typeof h.shares === "number" && typeof h.avgPrice === "number",
+          )
+        : [],
       valueTrend: Array.isArray(parsed.valueTrend) ? parsed.valueTrend : [],
     };
   } catch {
-    return { cash: STARTING_CASH, positions: [], valueTrend: [] };
+    return EMPTY;
   }
 }
 
 export function PortfolioApp() {
-  const [state, setState] = useState<State>(() => ({
-    cash: STARTING_CASH,
-    positions: [],
-    valueTrend: [{ t: Date.now(), v: STARTING_CASH }],
-  }));
+  const [state, setState] = useState<State>(EMPTY);
   const [tickerInput, setTickerInput] = useState("");
-  const [sharesInput, setSharesInput] = useState("10");
+  const [sharesInput, setSharesInput] = useState("");
+  const [priceInput, setPriceInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Hydrate from localStorage after mount
+  // Hydrate from localStorage after mount.
   useEffect(() => {
     setState(loadState());
   }, []);
@@ -85,35 +88,42 @@ export function PortfolioApp() {
     } catch {}
   }, [state]);
 
-  const livePrices = useLivePrices(state.positions.flatMap((p) => {
-    const s = NIFTY_50.find((x) => x.symbol === p.symbol);
-    return s ? [{ symbol: p.symbol, basePrice: s.basePrice }] : [];
-  }));
+  const livePrices = useLivePrices(
+    state.holdings.flatMap((p) => {
+      const s = NIFTY_50.find((x) => x.symbol === p.symbol);
+      return s ? [{ symbol: p.symbol, basePrice: s.basePrice }] : [];
+    }),
+  );
 
-  const enrichedPositions = useMemo(() => {
-    return state.positions.flatMap((p) => {
+  const enriched = useMemo(() => {
+    return state.holdings.flatMap((p) => {
       const stock = NIFTY_50.find((x) => x.symbol === p.symbol);
       if (!stock) return [];
-      const current = livePrices[p.symbol]?.price ?? stock.basePrice;
+      const tick = livePrices[p.symbol];
+      const current = tick?.price ?? stock.basePrice;
+      const dayChangePerShare = tick?.change ?? 0;
       const invested = p.avgPrice * p.shares;
       const value = current * p.shares;
       const pl = value - invested;
       const plPct = invested ? (pl / invested) * 100 : 0;
-      return [{ ...p, stock, current, invested, value, pl, plPct }];
+      const dayChange = dayChangePerShare * p.shares;
+      return [{ ...p, stock, current, invested, value, pl, plPct, dayChange }];
     });
-  }, [state.positions, livePrices]);
+  }, [state.holdings, livePrices]);
 
-  const invested = enrichedPositions.reduce((sum, p) => sum + p.invested, 0);
-  const value = enrichedPositions.reduce((sum, p) => sum + p.value, 0);
+  const invested = enriched.reduce((sum, p) => sum + p.invested, 0);
+  const value = enriched.reduce((sum, p) => sum + p.value, 0);
   const pl = value - invested;
   const plPct = invested ? (pl / invested) * 100 : 0;
-  const totalEquity = state.cash + value;
+  const dayChange = enriched.reduce((sum, p) => sum + p.dayChange, 0);
+  const dayChangePct = value - dayChange !== 0 ? (dayChange / (value - dayChange)) * 100 : 0;
 
-  // Update the value trend every 5 seconds
+  // Live value sparkline for the current session.
   useEffect(() => {
+    if (value <= 0) return;
     const id = setInterval(() => {
       setState((prev) => {
-        const newPoint = { t: Date.now(), v: prev.cash + value };
+        const newPoint = { t: Date.now(), v: value };
         const trend = [...prev.valueTrend, newPoint].slice(-60);
         return { ...prev, valueTrend: trend };
       });
@@ -123,61 +133,51 @@ export function PortfolioApp() {
 
   const allocation = useMemo(() => {
     const bySector: Record<string, number> = {};
-    for (const p of enrichedPositions) {
+    for (const p of enriched) {
       bySector[p.stock.sector] = (bySector[p.stock.sector] ?? 0) + p.value;
     }
     return Object.entries(bySector).map(([sector, v]) => ({ name: sector, value: v }));
-  }, [enrichedPositions]);
+  }, [enriched]);
 
-  function addPosition(e: React.FormEvent) {
+  function addHolding(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     const sym = tickerInput.trim().toUpperCase();
-    const shares = parseInt(sharesInput, 10);
+    const shares = Number(sharesInput);
+    const avg = Number(priceInput);
     if (!sym) return setError("Enter a ticker symbol.");
-    if (!shares || shares <= 0) return setError("Enter a positive number of shares.");
+    if (!Number.isFinite(shares) || shares <= 0) return setError("Enter a positive number of shares.");
+    if (!Number.isFinite(avg) || avg <= 0) return setError("Enter your average buy price (₹).");
     const stock = NIFTY_50.find((s) => s.symbol === sym);
     if (!stock) return setError(`${sym} is not in our Nifty 50 universe.`);
-    const live = livePrices[sym]?.price ?? stock.basePrice;
-    const cost = live * shares;
-    if (cost > state.cash) return setError(`Need ₹${formatINR(cost)}. You only have ₹${formatINR(state.cash)}.`);
 
     setState((prev) => {
-      const existing = prev.positions.find((p) => p.symbol === sym);
-      let positions: Position[];
+      const existing = prev.holdings.find((p) => p.symbol === sym);
+      let holdings: Holding[];
       if (existing) {
+        // Merge lots: weighted-average the cost across old and new shares.
         const totalShares = existing.shares + shares;
-        const avg = (existing.avgPrice * existing.shares + live * shares) / totalShares;
-        positions = prev.positions.map((p) =>
-          p.symbol === sym ? { symbol: sym, shares: totalShares, avgPrice: avg } : p,
+        const blended = (existing.avgPrice * existing.shares + avg * shares) / totalShares;
+        holdings = prev.holdings.map((p) =>
+          p.symbol === sym ? { ...p, shares: totalShares, avgPrice: blended } : p,
         );
       } else {
-        positions = [...prev.positions, { symbol: sym, shares, avgPrice: live }];
+        holdings = [...prev.holdings, { symbol: sym, shares, avgPrice: avg, addedAt: Date.now() }];
       }
-      return { ...prev, cash: prev.cash - cost, positions };
+      return { ...prev, holdings };
     });
     setTickerInput("");
-    setSharesInput("10");
+    setSharesInput("");
+    setPriceInput("");
   }
 
-  function sellAll(symbol: string) {
-    setState((prev) => {
-      const pos = prev.positions.find((p) => p.symbol === symbol);
-      if (!pos) return prev;
-      const live =
-        livePrices[symbol]?.price ?? NIFTY_50.find((s) => s.symbol === symbol)?.basePrice ?? pos.avgPrice;
-      const proceeds = pos.shares * live;
-      return {
-        ...prev,
-        cash: prev.cash + proceeds,
-        positions: prev.positions.filter((p) => p.symbol !== symbol),
-      };
-    });
+  function removeHolding(symbol: string) {
+    setState((prev) => ({ ...prev, holdings: prev.holdings.filter((p) => p.symbol !== symbol) }));
   }
 
-  function resetPortfolio() {
-    if (!confirm("Reset to ₹5,00,000 virtual cash? Your positions will be cleared.")) return;
-    setState({ cash: STARTING_CASH, positions: [], valueTrend: [{ t: Date.now(), v: STARTING_CASH }] });
+  function clearAll() {
+    if (!confirm("Remove all holdings? This clears your saved portfolio on this device.")) return;
+    setState(EMPTY);
   }
 
   return (
@@ -185,27 +185,33 @@ export function PortfolioApp() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.16em] font-semibold text-(--color-fg-subtle)">
-            Portfolio simulator
+            My portfolio
           </p>
-          <h1 className="mt-1 text-[28px] font-semibold tracking-tight">Practice investing — risk-free.</h1>
+          <h1 className="mt-1 text-[28px] font-semibold tracking-tight">Track the stocks you already own.</h1>
           <p className="mt-1 max-w-2xl text-[13.5px] text-(--color-fg-muted)">
-            Start with ₹5,00,000 in virtual cash. Buy and sell at live prices. Track your P&amp;L, allocation
-            and performance versus the index.
+            StockSense doesn&apos;t place trades — add the holdings from your real broker account with your
+            average buy price, and we&apos;ll track their live value, profit &amp; loss and allocation for you.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={resetPortfolio}>
-          Reset portfolio
-        </Button>
+        {enriched.length > 0 && (
+          <Button variant="outline" size="sm" onClick={clearAll}>
+            <Trash2 className="h-3.5 w-3.5" /> Clear all
+          </Button>
+        )}
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total equity" value={`₹${formatINR(totalEquity)}`} eyebrow={<Wallet className="h-3.5 w-3.5" />} accent />
-        <StatCard label="Cash available" value={`₹${formatINR(state.cash)}`} />
+        <StatCard label="Current value" value={`₹${formatINR(value)}`} eyebrow={<Wallet className="h-3.5 w-3.5" />} accent />
         <StatCard label="Invested" value={`₹${formatINR(invested)}`} />
         <StatCard
           label="Total P&L"
-          value={`${pl >= 0 ? "+" : ""}₹${formatINR(Math.abs(pl))}`}
-          delta={plPct}
+          value={`${pl >= 0 ? "+" : "-"}₹${formatINR(Math.abs(pl))}`}
+          delta={invested ? plPct : undefined}
+        />
+        <StatCard
+          label="Today's change"
+          value={`${dayChange >= 0 ? "+" : "-"}₹${formatINR(Math.abs(dayChange))}`}
+          delta={value ? dayChangePct : undefined}
         />
       </section>
 
@@ -213,12 +219,12 @@ export function PortfolioApp() {
         <Card padding="md">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardEyebrow>Add a position</CardEyebrow>
-              <p className="mt-1 text-[13.5px] text-(--color-fg-muted)">Buys execute at the current live price.</p>
+              <CardEyebrow>Add a holding</CardEyebrow>
+              <p className="mt-1 text-[13.5px] text-(--color-fg-muted)">Enter the shares and average price you actually paid.</p>
             </div>
-            <Badge tone="brand">Virtual money</Badge>
+            <Badge tone="brand">Saved on this device</Badge>
           </div>
-          <form onSubmit={addPosition} className="grid gap-3 sm:grid-cols-[1.4fr_1fr_auto]">
+          <form onSubmit={addHolding} className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
             <div>
               <Label htmlFor="ticker">Ticker</Label>
               <Input
@@ -243,14 +249,29 @@ export function PortfolioApp() {
                 id="shares"
                 type="number"
                 min={1}
+                step="any"
                 value={sharesInput}
                 onChange={(e) => setSharesInput(e.target.value)}
+                placeholder="10"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label htmlFor="avg">Avg buy price</Label>
+              <Input
+                id="avg"
+                type="number"
+                min={0}
+                step="any"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                placeholder="₹"
                 className="mt-1.5"
               />
             </div>
             <div className="flex items-end">
               <Button type="submit" size="md" className="w-full sm:w-auto">
-                <Plus className="h-4 w-4" /> Buy
+                <Plus className="h-4 w-4" /> Add
               </Button>
             </div>
           </form>
@@ -262,55 +283,64 @@ export function PortfolioApp() {
         </Card>
 
         <Card padding="md">
-          <CardEyebrow className="mb-3">Portfolio value trend</CardEyebrow>
-          <div className="h-[180px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={state.valueTrend} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="pvtFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#115e3c" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="#115e3c" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#eef1ee" vertical={false} />
-                <XAxis dataKey="t" tickFormatter={() => ""} tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#7c8a82" }} domain={["auto", "auto"]} width={62} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 12,
-                    boxShadow: "0 12px 30px -16px rgba(13,31,23,0.18)",
-                    fontSize: 12,
-                  }}
-                  labelFormatter={(t) => new Date(t).toLocaleTimeString()}
-                  formatter={(v) => [`₹${formatINR(Number(v))}`, "Equity"]}
-                />
-                <Area type="monotone" dataKey="v" stroke="#115e3c" strokeWidth={2} fill="url(#pvtFill)" isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <CardEyebrow className="mb-3">Portfolio value · live</CardEyebrow>
+          {state.valueTrend.length < 2 ? (
+            <div className="flex h-[180px] flex-col items-center justify-center text-center">
+              <TrendingUp className="h-6 w-6 text-(--color-fg-subtle)" />
+              <p className="mt-2 text-[13px] text-(--color-fg-muted)">
+                {enriched.length === 0 ? "Add a holding to start tracking value." : "Building live trend…"}
+              </p>
+            </div>
+          ) : (
+            <div className="h-[180px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={state.valueTrend} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="pvtFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#115e3c" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="#115e3c" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#eef1ee" vertical={false} />
+                  <XAxis dataKey="t" tickFormatter={() => ""} tickLine={false} axisLine={false} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#7c8a82" }} domain={["auto", "auto"]} width={62} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 12,
+                      boxShadow: "0 12px 30px -16px rgba(13,31,23,0.18)",
+                      fontSize: 12,
+                    }}
+                    labelFormatter={(t) => new Date(t).toLocaleTimeString()}
+                    formatter={(v) => [`₹${formatINR(Number(v))}`, "Value"]}
+                  />
+                  <Area type="monotone" dataKey="v" stroke="#115e3c" strokeWidth={2} fill="url(#pvtFill)" isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </Card>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <Card padding="none">
           <div className="border-b border-(--color-border) px-5 py-4">
-            <CardEyebrow>Open positions</CardEyebrow>
+            <CardEyebrow>Holdings</CardEyebrow>
           </div>
-          {enrichedPositions.length === 0 ? (
+          {enriched.length === 0 ? (
             <div className="px-6 py-14 text-center">
               <ChartPie className="mx-auto h-7 w-7 text-(--color-fg-subtle)" />
-              <p className="mt-3 text-[14.5px] font-semibold text-(--color-fg)">No positions yet</p>
-              <p className="mt-1 text-[13px] text-(--color-fg-muted)">Add your first stock above to start tracking gains.</p>
+              <p className="mt-3 text-[14.5px] font-semibold text-(--color-fg)">No holdings yet</p>
+              <p className="mt-1 text-[13px] text-(--color-fg-muted)">Add a stock you own above to start tracking its value.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse">
+              <table className="w-full min-w-[680px] border-collapse">
                 <thead>
                   <tr className="text-left text-[10.5px] uppercase tracking-[0.12em] text-(--color-fg-subtle)">
                     <th className="px-5 py-2 font-semibold">Ticker</th>
                     <th className="px-3 py-2 font-semibold">Shares</th>
-                    <th className="px-3 py-2 text-right font-semibold">Avg</th>
+                    <th className="px-3 py-2 text-right font-semibold">Avg cost</th>
                     <th className="px-3 py-2 text-right font-semibold">Live</th>
                     <th className="px-3 py-2 text-right font-semibold">Value</th>
                     <th className="px-3 py-2 text-right font-semibold">P&amp;L</th>
@@ -318,7 +348,7 @@ export function PortfolioApp() {
                   </tr>
                 </thead>
                 <tbody>
-                  {enrichedPositions.map((p) => (
+                  {enriched.map((p) => (
                     <tr key={p.symbol} className="border-t border-(--color-border) text-[13.5px] tabular">
                       <td className="px-5 py-3">
                         <p className="font-semibold tracking-tight text-(--color-fg)">{p.symbol}</p>
@@ -331,7 +361,7 @@ export function PortfolioApp() {
                       <td className="px-3 py-3 text-right">
                         <div className="flex flex-col items-end leading-tight">
                           <span className={`font-semibold ${p.pl >= 0 ? "text-(--color-up)" : "text-(--color-down)"}`}>
-                            {p.pl >= 0 ? "+" : ""}₹{formatINR(Math.abs(p.pl))}
+                            {p.pl >= 0 ? "+" : "-"}₹{formatINR(Math.abs(p.pl))}
                           </span>
                           <Delta value={p.plPct} size="xs" showIcon={false} />
                         </div>
@@ -339,10 +369,10 @@ export function PortfolioApp() {
                       <td className="px-5 py-3 text-right">
                         <button
                           type="button"
-                          onClick={() => sellAll(p.symbol)}
+                          onClick={() => removeHolding(p.symbol)}
                           className="rounded-md border border-(--color-border) px-2 py-1 text-[11.5px] font-semibold text-(--color-fg-muted) hover:border-(--color-down)/30 hover:bg-(--color-down-soft) hover:text-(--color-down)"
                         >
-                          <X className="mr-1 inline h-3 w-3" /> Sell all
+                          <Trash2 className="mr-1 inline h-3 w-3" /> Remove
                         </button>
                       </td>
                     </tr>
@@ -356,7 +386,7 @@ export function PortfolioApp() {
         <Card padding="md">
           <CardEyebrow className="mb-3">Allocation by sector</CardEyebrow>
           {allocation.length === 0 ? (
-            <p className="py-10 text-center text-[13px] text-(--color-fg-muted)">Add positions to see allocation.</p>
+            <p className="py-10 text-center text-[13px] text-(--color-fg-muted)">Add holdings to see allocation.</p>
           ) : (
             <>
               <div className="h-[200px]">

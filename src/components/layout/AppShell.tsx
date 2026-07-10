@@ -8,6 +8,7 @@ import {
   LineChart,
   CandlestickChart,
   Layers,
+  Scale,
   Briefcase,
   Bookmark,
   Newspaper,
@@ -30,6 +31,7 @@ const PRIMARY = [
   { href: "/market", label: "Market", icon: LineChart },
   { href: "/stocks", label: "Stocks", icon: CandlestickChart },
   { href: "/etfs", label: "ETFs", icon: Layers },
+  { href: "/compare", label: "Compare", icon: Scale },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/watchlist", label: "Watchlist", icon: Bookmark },
 ];
