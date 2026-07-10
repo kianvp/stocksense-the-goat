@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 const links = [
   { href: "/#features", label: "Features" },
   { href: "/#stats", label: "Numbers" },
-  { href: "/#testimonials", label: "Stories" },
+  { href: "/#principles", label: "Principles" },
   { href: "/#faq", label: "FAQ" },
 ];
 
@@ -40,18 +40,18 @@ export function MarketingNav() {
               </Button>
             ) : (
               <>
-                <a
-                  href="/dashboard/"
+                <Link
+                  href="/dashboard"
                   className="inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-medium text-white hover:bg-white/10"
                 >
                   Sign in
-                </a>
-                <a
-                  href="/dashboard/"
+                </Link>
+                <Link
+                  href="/dashboard"
                   className="inline-flex h-9 items-center rounded-xl bg-white px-3.5 text-sm font-medium text-(--color-brand-900) hover:bg-white/90"
                 >
                   Get started
-                </a>
+                </Link>
               </>
             )}
           </div>
@@ -79,18 +79,18 @@ export function MarketingNav() {
                   </Button>
                 ) : (
                   <>
-                    <a
-                      href="/dashboard/"
+                    <Link
+                      href="/dashboard"
                       className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-white/20 px-3.5 text-sm font-medium text-white"
                     >
                       Sign in
-                    </a>
-                    <a
-                      href="/dashboard/"
+                    </Link>
+                    <Link
+                      href="/dashboard"
                       className="inline-flex h-9 w-full items-center justify-center rounded-xl bg-white px-3.5 text-sm font-medium text-(--color-brand-900)"
                     >
                       Get started
-                    </a>
+                    </Link>
                   </>
                 )}
               </div>
