@@ -6,6 +6,7 @@ import {
   Bot,
   Briefcase,
   Newspaper,
+  Scale,
   TrendingUp,
   Sparkles,
   ArrowUpRight,
@@ -34,18 +35,27 @@ const FEATURES = [
     Visual: AiVisual,
   },
   {
+    id: "compare",
+    icon: Scale,
+    eyebrow: "03 — Compare desk",
+    title: "Two stocks. One verdict.",
+    body:
+      "Put any two Nifty 50 companies head-to-head — normalized performance, six fundamentals scored side by side, and an AI verdict on which looks stronger right now.",
+    Visual: CompareVisual,
+  },
+  {
     id: "portfolio",
     icon: Briefcase,
-    eyebrow: "03 — Virtual portfolio",
-    title: "Practise with ₹5,00,000. Risk nothing.",
+    eyebrow: "04 — Portfolio tracker",
+    title: "Your real holdings. Tracked live.",
     body:
-      "Build positions at real market prices, track P&L live, and learn how allocation actually behaves — before a single real rupee moves.",
+      "Log the stocks you already own with your average buy price — StockSense streams live prices and shows total value, P&L and sector allocation while you watch.",
     Visual: PortfolioVisual,
   },
   {
     id: "news",
     icon: Newspaper,
-    eyebrow: "04 — News intelligence",
+    eyebrow: "05 — News intelligence",
     title: "Headlines, with the 'so what' attached.",
     body:
       "Live market news scored for sentiment, and an AI 'why it matters' brief on every story — so you read less and understand more.",
@@ -234,6 +244,60 @@ function AiVisual() {
   );
 }
 
+function CompareVisual() {
+  const { ref, shown } = useReveal<HTMLDivElement>();
+  const rows = [
+    { label: "Valuation (P/E)", a: 62, b: 38 },
+    { label: "Dividend yield", a: 44, b: 56 },
+    { label: "52-week position", a: 58, b: 42 },
+  ];
+  return (
+    <Frame innerRef={ref} shown={shown}>
+      <div className="flex items-center justify-between">
+        <p className="text-[13.5px] font-semibold tracking-tight">
+          HDFCBANK <span className="font-medium text-(--color-fg-subtle)">vs</span> ICICIBANK
+        </p>
+        <span className="inline-flex items-center gap-1 rounded-full bg-(--color-brand-50) px-2 py-0.5 text-[11px] font-semibold text-(--color-brand-700)">
+          <Scale className="h-3 w-3" /> Compare
+        </span>
+      </div>
+      <div className="mt-5 space-y-3.5">
+        {rows.map((r, i) => (
+          <div key={r.label}>
+            <p className="text-[11px] font-medium text-(--color-fg-subtle)">{r.label}</p>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <div className="flex flex-1 justify-end overflow-hidden rounded-full bg-(--color-surface-2)">
+                <div
+                  className="grow-transition h-2 rounded-full bg-(--color-brand-600)"
+                  style={{ width: shown ? `${r.a}%` : "0%", "--grow-delay": `${250 + i * 130}ms` } as React.CSSProperties}
+                />
+              </div>
+              <div className="flex flex-1 overflow-hidden rounded-full bg-(--color-surface-2)">
+                <div
+                  className="grow-transition h-2 rounded-full bg-[#b27a00]"
+                  style={{ width: shown ? `${r.b}%` : "0%", "--grow-delay": `${250 + i * 130}ms` } as React.CSSProperties}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div
+        className={cn(
+          "reveal mt-4 flex items-center gap-2 rounded-xl border border-(--color-border) bg-(--color-surface-2)/60 px-3 py-2",
+          shown && "reveal-shown",
+        )}
+        style={{ "--reveal-delay": "650ms" } as React.CSSProperties}
+      >
+        <Sparkles className="h-3.5 w-3.5 shrink-0 text-(--color-brand-700)" />
+        <span className="text-[12.5px] text-(--color-fg)">
+          AI verdict: <span className="font-semibold">leans HDFCBANK</span> on valuation and stability
+        </span>
+      </div>
+    </Frame>
+  );
+}
+
 function PortfolioVisual() {
   const { ref, shown } = useReveal<HTMLDivElement>();
   const rows = [
@@ -244,7 +308,7 @@ function PortfolioVisual() {
   return (
     <Frame innerRef={ref} shown={shown}>
       <div className="flex items-baseline justify-between">
-        <p className="text-[13px] font-semibold text-(--color-fg-subtle)">Virtual portfolio</p>
+        <p className="text-[13px] font-semibold text-(--color-fg-subtle)">My holdings</p>
         <p className="text-[22px] font-semibold tabular tracking-tight">₹5,12,484</p>
       </div>
       <div className="mt-4 space-y-3">
