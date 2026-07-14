@@ -5,26 +5,21 @@ import { Send, Sparkles, TrendingUp, AlertTriangle, ArrowRight, Bot } from "luci
 import Link from "next/link";
 import { Card, CardEyebrow } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { generateJson, hasGeminiKey, type GeminiContent } from "@/lib/api/gemini";
-import { getQuote } from "@/lib/api/yahoo";
-import { NIFTY_50 } from "@/lib/mock-data";
-
-type Rich = {
-  confidence?: number;
-  stock?: { symbol: string; name: string; price: number; changePct: number };
-  metrics?: { label: string; value: string }[];
-  bullets?: string[];
-  risks?: string[];
-  opportunities?: string[];
-  related?: string[];
-};
-
-type Message = {
-  id: string;
-  role: "user" | "ai";
-  text: string;
-  rich?: Rich;
-};
+import { generateJson, type GeminiContent } from "@/lib/api/gemini";
+import { getQuote, type Quote } from "@/lib/api/yahoo";
+import { ChatSidebar } from "./ChatSidebar";
+import { ThinkingSteps, markStep, type Step } from "./ThinkingSteps";
+import {
+  newConversation,
+  loadConversations,
+  saveConversations,
+  deriveTitle,
+  guessSymbol,
+  hydrateStock,
+  fallbackMessage,
+  type Conversation,
+  type ChatMessage,
+} from "@/lib/chat-store";
 
 type GeminiAnswer = {
   text: string;
@@ -45,15 +40,6 @@ const SUGGESTED = [
   "What is a P/E ratio?",
 ];
 
-const INITIAL: Message[] = [
-  {
-    id: "seed-1",
-    role: "ai",
-    text:
-      "Hi, I'm Sense — your AI markets companion. I can help you research stocks, compare peers, and understand earnings. What would you like to look at?",
-  },
-];
-
 const SYSTEM_PROMPT = `You are Sense, an AI markets assistant for Indian retail investors using a stock-research app called StockSense.
 Reply briefly and clearly in plain English. Educational tone, never give explicit buy/sell advice.
 
@@ -70,88 +56,126 @@ You MUST respond with a single JSON object matching this TypeScript type — no 
 
 Always use Indian-context examples and INR. If the user asks about a US stock, return its US ticker in "symbol" only if asked specifically.`;
 
-function findKnownSymbol(text: string): string | undefined {
-  const upper = text.toUpperCase();
-  return NIFTY_50.find((s) => upper.includes(s.symbol))?.symbol;
-}
-
-// Gemini's response is rendered straight into `/stocks/[symbol]` links, so
-// only accept strings that actually look like a ticker before trusting them.
-const SAFE_TICKER = /^[A-Z0-9]{1,15}$/;
-
-function isSafeTicker(s: string): boolean {
-  return SAFE_TICKER.test(s);
-}
-
-async function hydrateStockCard(answer: GeminiAnswer): Promise<Rich["stock"] | undefined> {
-  const sym = answer.symbol?.toUpperCase();
-  if (!sym || !isSafeTicker(sym)) return undefined;
-  const known = NIFTY_50.find((s) => s.symbol === sym);
-  const name = known?.name ?? sym;
-  const quote = await getQuote(sym);
-  if (quote) {
-    return { symbol: sym, name, price: quote.price, changePct: quote.changePct };
-  }
-  if (known) {
-    return { symbol: sym, name: known.name, price: known.basePrice, changePct: 0 };
-  }
-  return undefined;
-}
-
-function fallbackResponse(prompt: string): Message {
-  return {
-    id: `a-${Date.now()}`,
-    role: "ai",
-    text: hasGeminiKey()
-      ? "I couldn't reach Gemini just now — please try again in a moment."
-      : "Add a NEXT_PUBLIC_GEMINI_KEY to enable real AI responses. In the meantime, " +
-        "for a question like \"" + prompt + "\" I'd start with last earnings, peer multiples, and recent news.",
-    rich: {
-      confidence: 30,
-      bullets: [
-        "Check the latest quarterly results and management commentary",
-        "Compare valuation multiples (P/E, P/B) to sector peers",
-        "Look at recent news, analyst revisions and insider activity",
-      ],
-    },
-  };
-}
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function AskAi() {
-  const [messages, setMessages] = useState<Message[]>(INITIAL);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string>("");
   const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [busyChatId, setBusyChatId] = useState<string | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const hydrated = useRef(false);
+
+  // Load saved chats once on mount; always land on the most recently active one.
+  useEffect(() => {
+    const saved = loadConversations();
+    if (saved.length > 0) {
+      const latest = [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      setConversations(saved);
+      setActiveId(latest.id);
+    } else {
+      const fresh = newConversation();
+      setConversations([fresh]);
+      setActiveId(fresh.id);
+    }
+    hydrated.current = true;
+  }, []);
+
+  // Persist on every change (post-hydration).
+  useEffect(() => {
+    if (!hydrated.current) return;
+    saveConversations(conversations);
+  }, [conversations]);
+
+  const active = conversations.find((c) => c.id === activeId);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, thinking]);
+  }, [active?.messages.length, busy, steps.length]);
 
-  async function send(prompt: string) {
-    const trimmed = prompt.trim();
-    if (!trimmed) return;
-    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text: trimmed };
-    const next = [...messages, userMsg];
-    setMessages(next);
+  function handleNewChat() {
+    const current = conversations.find((c) => c.id === activeId);
+    // Don't stack empty drafts — reuse the current one if it has no messages yet.
+    if (current && !current.messages.some((m) => m.role === "user")) return;
+    const fresh = newConversation();
+    setConversations((prev) => [...prev, fresh]);
+    setActiveId(fresh.id);
+  }
+
+  function handleDelete(id: string) {
+    const next = conversations.filter((c) => c.id !== id);
+    if (next.length === 0) {
+      const fresh = newConversation();
+      setConversations([fresh]);
+      setActiveId(fresh.id);
+      return;
+    }
+    setConversations(next);
+    if (id === activeId) {
+      const fallback = [...next].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      setActiveId(fallback.id);
+    }
+  }
+
+  function handleRename(id: string, title: string) {
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
+  }
+
+  async function send(promptRaw: string) {
+    const trimmed = promptRaw.trim();
+    const current = conversations.find((c) => c.id === activeId);
+    if (!trimmed || busy || !current) return;
+
+    const chatId = current.id;
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", text: trimmed };
+    const isFirstUserMsg = !current.messages.some((m) => m.role === "user");
+    const historyMsgs = [...current.messages, userMsg];
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === chatId
+          ? { ...c, title: isFirstUserMsg ? deriveTitle(trimmed) : c.title, messages: historyMsgs, updatedAt: Date.now() }
+          : c,
+      ),
+    );
     setInput("");
-    setThinking(true);
+    setBusy(true);
+    setBusyChatId(chatId);
 
-    const history: GeminiContent[] = next
+    setSteps([{ id: "understand", label: "Understanding your question", status: "active" }]);
+    await wait(220);
+    setSteps((s) => markStep(s, "understand", "done"));
+
+    setSteps((s) => [...s, { id: "search", label: "Searching the market for related tickers", status: "active" }]);
+    await wait(240);
+    const candidate = guessSymbol(trimmed);
+    setSteps((s) => markStep(s, "search", "done"));
+
+    let preQuote: Quote | null = null;
+    if (candidate) {
+      setSteps((s) => [...s, { id: "quote", label: `Fetching live price for ${candidate}`, status: "active" }]);
+      preQuote = await getQuote(candidate);
+      setSteps((s) => markStep(s, "quote", "done"));
+    }
+
+    setSteps((s) => [...s, { id: "gemini", label: "Reasoning about your question", status: "active" }]);
+    const geminiHistory: GeminiContent[] = historyMsgs
       .filter((m) => m.id !== "seed-1")
-      .map((m) => ({
-        role: m.role === "user" ? "user" : "model",
-        parts: [{ text: m.text }],
-      }));
+      .map((m) => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] }));
+    const answer = await generateJson<GeminiAnswer>(geminiHistory, { system: SYSTEM_PROMPT, temperature: 0.55 });
+    setSteps((s) => markStep(s, "gemini", "done"));
 
-    let aiMsg: Message;
-    const answer = await generateJson<GeminiAnswer>(history, { system: SYSTEM_PROMPT, temperature: 0.55 });
+    setSteps((s) => [...s, { id: "compile", label: "Compiling your answer", status: "active" }]);
+    let aiMsg: ChatMessage;
     if (!answer) {
-      aiMsg = fallbackResponse(trimmed);
+      aiMsg = fallbackMessage(trimmed);
     } else {
-      const stock = await hydrateStockCard({
-        ...answer,
-        symbol: answer.symbol ?? findKnownSymbol(trimmed),
-      });
+      const symbolForCard = answer.symbol ?? candidate;
+      const stock = symbolForCard
+        ? await hydrateStock(symbolForCard, candidate ? { symbol: candidate, quote: preQuote } : undefined)
+        : undefined;
       aiMsg = {
         id: `a-${Date.now()}`,
         role: "ai",
@@ -162,18 +186,29 @@ export function AskAi() {
           bullets: answer.bullets,
           opportunities: answer.opportunities,
           risks: answer.risks,
-          related: answer.related?.map((s) => s.toUpperCase()).filter(isSafeTicker),
+          related: answer.related?.map((s) => s.toUpperCase()).filter((s) => /^[A-Z0-9]{1,15}$/.test(s)),
         },
       };
     }
-    setMessages((m) => [...m, aiMsg]);
-    setThinking(false);
+    await wait(150);
+    setSteps((s) => markStep(s, "compile", "done"));
+    await wait(150);
+
+    setConversations((prev) =>
+      prev.map((c) => (c.id === chatId ? { ...c, messages: [...c.messages, aiMsg], updatedAt: Date.now() } : c)),
+    );
+    setBusy(false);
+    setBusyChatId(null);
+    setSteps([]);
   }
+
+  const showEmptyPrompts = active && !active.messages.some((m) => m.role === "user");
+  const showThinking = busy && busyChatId === activeId;
 
   return (
     <div className="grid h-[calc(100vh-9rem)] gap-5 lg:grid-cols-[280px_1fr]">
       <aside className="hidden lg:flex flex-col rounded-2xl border border-(--color-border) bg-(--color-surface) p-4">
-        <div className="flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-(--color-brand-700) text-white">
             <Bot className="h-4 w-4" />
           </span>
@@ -182,25 +217,14 @@ export function AskAi() {
             <p className="text-[11.5px] text-(--color-fg-subtle)">AI markets assistant</p>
           </div>
         </div>
-        <p className="mt-4 text-[11px] uppercase tracking-[0.14em] font-semibold text-(--color-fg-subtle)">
-          Try asking
-        </p>
-        <ul className="mt-3 space-y-1.5">
-          {SUGGESTED.map((q) => (
-            <li key={q}>
-              <button
-                type="button"
-                onClick={() => send(q)}
-                className="w-full rounded-lg border border-(--color-border) bg-(--color-surface) px-3 py-2 text-left text-[13px] text-(--color-fg) hover:border-(--color-brand-300) hover:bg-(--color-brand-50)"
-              >
-                {q}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-auto rounded-xl border border-(--color-border) bg-(--color-surface-2) p-3 text-[11.5px] leading-relaxed text-(--color-fg-muted)">
-          Sense is for educational use only. Not financial advice. Always cross-check critical info.
-        </div>
+        <ChatSidebar
+          conversations={conversations}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onNew={handleNewChat}
+          onDelete={handleDelete}
+          onRename={handleRename}
+        />
       </aside>
 
       <Card padding="none" className="flex flex-col overflow-hidden">
@@ -210,7 +234,7 @@ export function AskAi() {
               <Sparkles className="h-4 w-4" />
             </span>
             <div>
-              <p className="text-[14px] font-semibold tracking-tight">Ask the AI</p>
+              <p className="text-[14px] font-semibold tracking-tight">{active?.title ?? "Ask the AI"}</p>
               <p className="text-[11.5px] text-(--color-fg-subtle)">Powered by Gemini · live prices via Yahoo Finance</p>
             </div>
           </div>
@@ -218,8 +242,34 @@ export function AskAi() {
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-6 space-y-5">
-          {messages.map((m) => (m.role === "user" ? <UserBubble key={m.id} text={m.text} /> : <AiBubble key={m.id} msg={m} />))}
-          {thinking && <Thinking />}
+          {active?.messages.map((m) => (m.role === "user" ? <UserBubble key={m.id} text={m.text} /> : <AiBubble key={m.id} msg={m} />))}
+          {showEmptyPrompts && !showThinking && (
+            <div className="flex gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-(--color-brand-50) text-(--color-brand-700)">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {SUGGESTED.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => send(q)}
+                    className="rounded-full border border-(--color-border) bg-(--color-surface) px-3 py-1.5 text-[12.5px] text-(--color-fg-muted) hover:border-(--color-brand-300) hover:bg-(--color-brand-50) hover:text-(--color-brand-700)"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {showThinking && (
+            <div className="flex gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-(--color-brand-50) text-(--color-brand-700)">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <ThinkingSteps steps={steps} />
+            </div>
+          )}
         </div>
 
         <div className="border-t border-(--color-border) bg-(--color-bg) p-4">
@@ -239,14 +289,15 @@ export function AskAi() {
                   send(input);
                 }
               }}
-              placeholder="Ask anything — e.g. 'How is Infosys doing this quarter?'"
+              placeholder={busy && busyChatId !== activeId ? "Sense is thinking in another chat…" : "Ask anything — e.g. 'How is Infosys doing this quarter?'"}
               rows={1}
-              className="flex-1 resize-none bg-transparent px-2 py-2 text-[14.5px] text-(--color-fg) placeholder:text-(--color-fg-subtle) focus:outline-none"
+              disabled={busy}
+              className="flex-1 resize-none bg-transparent px-2 py-2 text-[14.5px] text-(--color-fg) placeholder:text-(--color-fg-subtle) focus:outline-none disabled:opacity-60"
             />
             <button
               type="submit"
               className="grid h-10 w-10 place-items-center rounded-xl bg-(--color-brand-700) text-white hover:bg-(--color-brand-800) disabled:opacity-50"
-              disabled={!input.trim() || thinking}
+              disabled={!input.trim() || busy}
               aria-label="Send"
             >
               <Send className="h-4 w-4" />
@@ -271,7 +322,7 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-function AiBubble({ msg }: { msg: Message }) {
+function AiBubble({ msg }: { msg: ChatMessage }) {
   const r = msg.rich;
   return (
     <div className="flex gap-3">
@@ -362,9 +413,7 @@ function AiBubble({ msg }: { msg: Message }) {
         )}
         {typeof r?.confidence === "number" && (
           <div className="flex items-center gap-3 rounded-xl border border-(--color-border) bg-(--color-surface) px-3 py-2">
-            <p className="text-[11px] uppercase tracking-[0.12em] font-semibold text-(--color-fg-subtle)">
-              AI confidence
-            </p>
+            <p className="text-[11px] uppercase tracking-[0.12em] font-semibold text-(--color-fg-subtle)">AI confidence</p>
             <div className="flex-1 overflow-hidden rounded-full bg-(--color-surface-2)">
               <div
                 className="h-1.5 rounded-full"
@@ -390,29 +439,5 @@ function AiBubble({ msg }: { msg: Message }) {
         )}
       </div>
     </div>
-  );
-}
-
-function Thinking() {
-  return (
-    <div className="flex gap-3">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-(--color-brand-50) text-(--color-brand-700)">
-        <Sparkles className="h-4 w-4" />
-      </span>
-      <div className="flex items-center gap-1 rounded-2xl rounded-tl-md border border-(--color-border) bg-(--color-surface) px-4 py-3">
-        <Dot />
-        <Dot delay={120} />
-        <Dot delay={240} />
-      </div>
-    </div>
-  );
-}
-
-function Dot({ delay = 0 }: { delay?: number }) {
-  return (
-    <span
-      className="block h-1.5 w-1.5 rounded-full bg-(--color-fg-subtle) animate-pulse-dot"
-      style={{ animationDelay: `${delay}ms` }}
-    />
   );
 }
