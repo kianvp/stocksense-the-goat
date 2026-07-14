@@ -97,7 +97,7 @@ export function SignInModal() {
             Welcome back.
           </h2>
           <p className="mt-2 text-[14.5px] leading-relaxed text-(--color-fg-muted)">
-            Sign in with Google to sync your watchlist, portfolio simulator, and AI conversations across devices.
+            Sign in with Google to sync your watchlist, portfolio, and AI conversations across devices.
           </p>
 
           {setupNeeded ? (

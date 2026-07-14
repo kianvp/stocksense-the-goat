@@ -7,19 +7,19 @@ import { cn } from "@/lib/cn";
 const FAQS = [
   {
     q: "Is StockSense a broker? Can I buy real stocks here?",
-    a: "No. StockSense is a research, simulation and AI assistant — not a broker. When you're ready to invest real money, we point you to SEBI-registered brokers like Zerodha, Groww, Upstox and others.",
+    a: "No. StockSense is a research, tracking and AI assistant — not a broker. When you're ready to invest real money, we point you to SEBI-registered brokers like Zerodha, Groww, Upstox and others.",
   },
   {
     q: "How accurate is the live price data?",
-    a: "Prices update every second during market hours and reflect cached NSE data with a small delay. For execution decisions on real money, always confirm with your broker.",
+    a: "Prices refresh continuously during market hours and reflect cached NSE data with a small delay. For execution decisions on real money, always confirm with your broker.",
   },
   {
     q: "Does the AI tell me which stock to buy?",
     a: "No. The AI helps you understand a stock — fundamentals, recent moves, risks and peers. It's an aid to your thinking, not financial advice.",
   },
   {
-    q: "How does the trading simulator work?",
-    a: "Every new account gets ₹5,00,000 in virtual cash. You can buy and sell at live prices, track P&L, allocation and performance versus Nifty 50 — without risking a rupee.",
+    q: "How does the portfolio tracker work?",
+    a: "Add the stocks you already own with your average buy price. StockSense tracks live value, P&L and sector allocation — all saved on your device. It can't place trades, so your money stays with your broker.",
   },
   {
     q: "Is StockSense free?",

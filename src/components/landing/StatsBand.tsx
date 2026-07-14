@@ -5,7 +5,7 @@ import { useReveal, useCountUp } from "@/lib/use-reveal";
 const STATS = [
   { to: 2354, format: (v: number) => `${Math.round(v).toLocaleString("en-IN")}+`, label: "NSE stocks, live" },
   { to: 328, format: (v: number) => `${Math.round(v)}`, label: "ETFs tracked" },
-  { to: 500000, format: (v: number) => `₹${(v / 100000).toFixed(v >= 500000 ? 0 : 1)}L`, label: "Virtual cash to practise" },
+  { to: 50, format: (v: number) => `${Math.round(v)}`, label: "Nifty stocks to compare head-to-head" },
   { to: 20, format: (v: number) => `${Math.round(v)}s`, label: "Quote refresh cycle" },
 ];
 
