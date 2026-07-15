@@ -303,7 +303,7 @@ function PortfolioVisual() {
   const rows = [
     { sym: "HDFCBANK", pnl: "+₹4,820", up: true, w: "72%" },
     { sym: "INFY", pnl: "+₹2,140", up: true, w: "54%" },
-    { sym: "TATAMOTORS", pnl: "-₹1,080", up: false, w: "38%" },
+    { sym: "TMPV", pnl: "-₹1,080", up: false, w: "38%" },
   ];
   return (
     <Frame innerRef={ref} shown={shown}>

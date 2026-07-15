@@ -146,7 +146,7 @@ export function Hero3D() {
           <Badge />
           <Headline />
           <p className="mt-6 max-w-xl text-[16px] leading-relaxed text-white/70 sm:text-[17.5px]">
-            Scroll to fly through it.
+            Scroll to follow the line.
           </p>
         </div>
 

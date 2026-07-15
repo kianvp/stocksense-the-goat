@@ -19,7 +19,7 @@ const SCREENS = [
   { sym: "BHARTIARTL", label: "BHARTIARTL", sub: "Bharti Airtel", index: false },
   { sym: "ICICIBANK", label: "ICICIBANK", sub: "ICICI Bank", index: false },
   { sym: "INFY", label: "INFY", sub: "Infosys", index: false },
-  { sym: "TATAMOTORS", label: "TATAMOTORS", sub: "Tata Motors", index: false },
+  { sym: "TMPV", label: "TMPV", sub: "Tata Motors Passenger Vehicles", index: false },
   { sym: "SBIN", label: "SBIN", sub: "State Bank of India", index: false },
   { sym: "NIFTYBEES", label: "NIFTYBEES", sub: "Nifty 50 ETF", index: false },
 ];

@@ -12,7 +12,7 @@ import { useLivePrices } from "@/lib/use-live-prices";
 import { formatINR } from "@/lib/format";
 
 const STORAGE_KEY = "stocksense.watchlist.v1";
-const DEFAULT = ["RELIANCE", "INFY", "HDFCBANK", "TATAMOTORS", "ADANIENT"];
+const DEFAULT = ["RELIANCE", "INFY", "HDFCBANK", "TMPV", "ADANIENT"];
 
 export default function WatchlistPage() {
   const [symbols, setSymbols] = useState<string[]>(DEFAULT);

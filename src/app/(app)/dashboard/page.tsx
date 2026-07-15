@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { INDICES, NIFTY_50 } from "@/lib/mock-data";
 
-const SHORTCUTS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "BHARTIARTL", "TATAMOTORS"];
-const TRENDING = ["ADANIENT", "TATAMOTORS", "SBIN", "ICICIBANK", "RELIANCE", "BHARTIARTL"];
+const SHORTCUTS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "BHARTIARTL", "TMPV"];
+const TRENDING = ["ADANIENT", "TMPV", "SBIN", "ICICIBANK", "RELIANCE", "BHARTIARTL"];
 const RECENT = ["ADANIENT", "SUNPHARMA", "AXISBANK", "BAJFINANCE", "KOTAKBANK", "HCLTECH"];
 
 export default function DashboardPage() {

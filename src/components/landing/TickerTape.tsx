@@ -10,7 +10,7 @@ const TAPE_SYMBOLS = [
   "NIFTY50", "SENSEX", "BANKNIFTY",
   "RELIANCE", "HDFCBANK", "TCS", "BHARTIARTL", "ICICIBANK", "SBIN", "INFY",
   "BAJFINANCE", "HINDUNILVR", "ITC", "LT", "MARUTI", "SUNPHARMA", "TITAN",
-  "TATAMOTORS", "ADANIENT", "NTPC", "ULTRACEMCO", "AXISBANK", "WIPRO", "NIFTYBEES",
+  "TMPV", "ADANIENT", "NTPC", "ULTRACEMCO", "AXISBANK", "WIPRO", "NIFTYBEES",
 ];
 
 const INDEX_LABELS: Record<string, string> = {
@@ -36,7 +36,11 @@ export function TickerTape() {
     };
   }, []);
 
-  const items = TAPE_SYMBOLS.map((sym) => ({ sym, q: quotes[sym] }));
+  // Before the first batch arrives every symbol shows a skeleton; afterwards,
+  // symbols Yahoo doesn't know (delisted/renamed tickers) drop out entirely
+  // instead of scrolling past as permanent grey bars.
+  const loaded = Object.keys(quotes).length > 0;
+  const items = TAPE_SYMBOLS.map((sym) => ({ sym, q: quotes[sym] })).filter(({ q }) => !loaded || q);
 
   return (
     <div className="marquee-hover relative overflow-hidden border-y border-white/10 bg-white/[0.03] py-3 backdrop-blur-sm">
