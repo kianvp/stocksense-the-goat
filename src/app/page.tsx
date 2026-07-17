@@ -1,44 +1,32 @@
-import { MarketingNav } from "@/components/layout/MarketingNav";
+import { LoadingScreen } from "@/components/landing/site/LoadingScreen";
 import { SmoothScroll } from "@/components/landing/SmoothScroll";
-import { GlobeHero } from "@/components/landing/globe/GlobeHero";
+import { Hero } from "@/components/landing/site/Hero";
 import { TickerTape } from "@/components/landing/TickerTape";
-import { MarketPulse } from "@/components/landing/MarketPulse";
-import { VelocityMarquee } from "@/components/landing/VelocityMarquee";
-import { FeatureCinema } from "@/components/landing/FeatureCinema";
-import { QuantEngine } from "@/components/landing/QuantEngine";
-import { StatsBand } from "@/components/landing/StatsBand";
-import { Principles } from "@/components/landing/Principles";
+import { About } from "@/components/landing/site/About";
+import { Stats } from "@/components/landing/site/Stats";
+import { CtaShowcase } from "@/components/landing/site/CtaShowcase";
+import { Bento } from "@/components/landing/site/Bento";
 import { FAQ } from "@/components/landing/FAQ";
-import { CtaBanner } from "@/components/landing/CtaBanner";
 import { Footer } from "@/components/landing/Footer";
 
 export default function LandingPage() {
   return (
     <main className="bg-(--color-bg)">
+      <LoadingScreen />
       <SmoothScroll />
 
-      {/* Dark cinematic region: nav, pinned WebGL globe, live tape, glide, marquee */}
-      <div className="gradient-brand-soft noise relative overflow-clip">
-        <div className="absolute inset-0 grid-mask pointer-events-none" />
-        <div className="relative">
-          <MarketingNav />
-          <GlobeHero />
-          <TickerTape />
-          <MarketPulse />
-          <VelocityMarquee />
-        </div>
+      {/* Dark region: cinematic hero + a live NSE tape as real-data proof */}
+      <div className="gradient-brand-soft relative overflow-clip bg-(--color-brand-950)">
+        <Hero />
+        <TickerTape />
       </div>
 
-      {/* Light editorial region */}
-      <FeatureCinema />
-
-      {/* Dark centrepiece: live technical-analysis engine showing its math */}
-      <QuantEngine />
-
-      <StatsBand />
-      <Principles />
+      {/* Light editorial flow */}
+      <About />
+      <Stats />
+      <CtaShowcase />
+      <Bento />
       <FAQ />
-      <CtaBanner />
       <Footer />
     </main>
   );

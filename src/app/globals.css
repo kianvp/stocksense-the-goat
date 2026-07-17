@@ -298,3 +298,71 @@ button, a, [role="button"], input, select, textarea {
   animation: shimmer 1.6s linear infinite;
   border-radius: var(--radius-sm);
 }
+
+/* ============================================================
+   Landing (Cirform-style flow, InvestSense theme)
+   ============================================================ */
+
+/* Typewriter caret */
+.caret {
+  display: inline-block;
+  width: 3px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--color-brand-300);
+  animation: caret-blink 0.85s step-end infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+/* Hero backdrop — drifting aurora glows (replaces the old speed lines) */
+@keyframes aurora-a {
+  0%, 100% { transform: translate(-6%, -3%) scale(1); }
+  50%      { transform: translate(7%, 5%) scale(1.18); }
+}
+@keyframes aurora-b {
+  0%, 100% { transform: translate(6%, 4%) scale(1.12); }
+  50%      { transform: translate(-6%, -4%) scale(1); }
+}
+.aurora-a { animation: aurora-a 20s ease-in-out infinite; }
+.aurora-b { animation: aurora-b 26s ease-in-out infinite; }
+
+/* Soft light beams — slow, blurred, far calmer than hard speed lines */
+@keyframes beam-slide {
+  0%       { transform: translateX(-130%); opacity: 0; }
+  18%, 82% { opacity: 0.55; }
+  100%     { transform: translateX(130%); opacity: 0; }
+}
+.beam { animation: beam-slide var(--beam-dur, 10s) ease-in-out var(--beam-delay, 0s) infinite; }
+
+/* Big stat — blur/scale in */
+@keyframes blur-in {
+  from { filter: blur(14px); opacity: 0; transform: scale(0.86); }
+  to   { filter: blur(0);    opacity: 1; transform: scale(1); }
+}
+.blur-in { animation: blur-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Clipped line reveal (CTA headline) */
+.line-clip { overflow: hidden; }
+.line-rise { transform: translateY(105%); opacity: 0; }
+.line-rise.is-in { animation: line-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes line-rise { to { transform: translateY(0); opacity: 1; } }
+
+/* SVG draw-on (arcs, marks) — pair with an inline stroke-dasharray */
+@keyframes draw-on { to { stroke-dashoffset: 0; } }
+
+/* Motion-path dot travelling the stat arc */
+@keyframes travel-arc {
+  0%   { offset-distance: 0%;   opacity: 0; }
+  8%   { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 1; }
+}
+
+/* Loading screen */
+@keyframes loader-out { to { opacity: 0; visibility: hidden; } }
+@keyframes loader-mark { to { stroke-dashoffset: 0; } }
+@keyframes loader-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .caret, .aurora-a, .aurora-b, .beam, .blur-in { animation: none !important; }
+  .line-rise { transform: none; opacity: 1; }
+}
