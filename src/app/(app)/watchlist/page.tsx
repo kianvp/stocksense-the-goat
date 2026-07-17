@@ -10,8 +10,9 @@ import { Delta } from "@/components/ui/Delta";
 import { NIFTY_50 } from "@/lib/mock-data";
 import { useLivePrices } from "@/lib/use-live-prices";
 import { formatINR } from "@/lib/format";
+import { localGet, localSet, storageKey } from "@/lib/storage";
 
-const STORAGE_KEY = "stocksense.watchlist.v1";
+const STORAGE_KEY = storageKey("watchlist");
 const DEFAULT = ["RELIANCE", "INFY", "HDFCBANK", "TMPV", "ADANIENT"];
 
 export default function WatchlistPage() {
@@ -21,7 +22,7 @@ export default function WatchlistPage() {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw = localGet(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.every((s) => typeof s === "string")) {
@@ -31,9 +32,7 @@ export default function WatchlistPage() {
   }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(symbols));
-    } catch {}
+    localSet(STORAGE_KEY, JSON.stringify(symbols));
   }, [symbols]);
 
   const list = symbols.map((sym) => NIFTY_50.find((s) => s.symbol === sym)).filter(Boolean) as typeof NIFTY_50;

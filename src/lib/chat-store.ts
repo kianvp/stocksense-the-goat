@@ -1,10 +1,11 @@
 // Chat persistence + helpers for AskAi. Pure logic, no React — mirrors the
-// stocksense.<feature>.v1 localStorage convention used by watchlist/portfolio.
+// investsense.<feature>.v1 localStorage convention used by watchlist/portfolio.
 
 import { getQuote, type Quote } from "@/lib/api/yahoo";
 import { hasGeminiKey } from "@/lib/api/gemini";
 import { lookupInstrument, searchUniverse } from "@/lib/universe";
 import { NIFTY_50 } from "@/lib/mock-data";
+import { localGet, localSet, storageKey } from "@/lib/storage";
 
 export type RichStock = { symbol: string; name: string; price: number; changePct: number };
 
@@ -33,7 +34,7 @@ export type Conversation = {
   updatedAt: number;
 };
 
-const STORAGE_KEY = "stocksense.chats.v1";
+const STORAGE_KEY = storageKey("chats");
 
 const SEED_MESSAGE: ChatMessage = {
   id: "seed-1",
@@ -55,7 +56,7 @@ export function newConversation(): Conversation {
 
 export function loadConversations(): Conversation[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = localGet(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Conversation[];
     return Array.isArray(parsed) ? parsed : [];
@@ -65,14 +66,10 @@ export function loadConversations(): Conversation[] {
 }
 
 export function saveConversations(list: Conversation[]) {
-  try {
-    // Only persist chats that have at least one user message — keeps
-    // localStorage free of empty drafts from clicking "New chat".
-    const worthy = list.filter((c) => c.messages.some((m) => m.role === "user"));
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(worthy));
-  } catch {
-    /* noop */
-  }
+  // Only persist chats that have at least one user message — keeps
+  // localStorage free of empty drafts from clicking "New chat".
+  const worthy = list.filter((c) => c.messages.some((m) => m.role === "user"));
+  localSet(STORAGE_KEY, JSON.stringify(worthy));
 }
 
 export function deriveTitle(text: string): string {

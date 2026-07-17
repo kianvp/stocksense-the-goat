@@ -2,11 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { decodeGoogleCredential } from "./jwt";
+import { localGet, localRemove, localSet, storageKey } from "@/lib/storage";
 import type { AuthUser } from "./types";
 import "./types";
 
-const STORAGE_KEY = "stocksense.user.v1";
-const SIGNIN_OPEN_EVENT = "stocksense:open-signin";
+const STORAGE_KEY = storageKey("user");
+const SIGNIN_OPEN_EVENT = "investsense:open-signin";
 
 export type AuthContextValue = {
   user: AuthUser | null;
@@ -65,14 +66,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const fromCookie = readIdentityCookie();
       if (fromCookie && !isExpired(fromCookie)) {
         setUser(fromCookie);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fromCookie));
+        localSet(STORAGE_KEY, JSON.stringify(fromCookie));
         return;
       }
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw = localGet(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as AuthUser;
         if (isExpired(parsed)) {
-          window.localStorage.removeItem(STORAGE_KEY);
+          localRemove(STORAGE_KEY);
         } else {
           setUser(parsed);
         }
@@ -89,11 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const id = setInterval(() => {
       setUser((u) => {
         if (!u || !isExpired(u)) return u;
-        try {
-          window.localStorage.removeItem(STORAGE_KEY);
-        } catch {
-          /* noop */
-        }
+        localRemove(STORAGE_KEY);
         return null;
       });
     }, 60_000);
@@ -118,12 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const persist = useCallback((u: AuthUser | null) => {
     setUser(u);
-    try {
-      if (u) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-      else window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* noop */
-    }
+    if (u) localSet(STORAGE_KEY, JSON.stringify(u));
+    else localRemove(STORAGE_KEY);
   }, []);
 
   const signOut = useCallback(() => {

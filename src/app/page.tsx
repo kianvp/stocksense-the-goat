@@ -1,6 +1,6 @@
 import { MarketingNav } from "@/components/layout/MarketingNav";
 import { SmoothScroll } from "@/components/landing/SmoothScroll";
-import { Hero3D } from "@/components/landing/hero3d/Hero3D";
+import { GlobeHero } from "@/components/landing/globe/GlobeHero";
 import { TickerTape } from "@/components/landing/TickerTape";
 import { MarketPulse } from "@/components/landing/MarketPulse";
 import { VelocityMarquee } from "@/components/landing/VelocityMarquee";
@@ -17,12 +17,12 @@ export default function LandingPage() {
     <main className="bg-(--color-bg)">
       <SmoothScroll />
 
-      {/* Dark cinematic region: nav, pinned WebGL hero, live tape, glide, marquee */}
+      {/* Dark cinematic region: nav, pinned WebGL globe, live tape, glide, marquee */}
       <div className="gradient-brand-soft noise relative overflow-clip">
         <div className="absolute inset-0 grid-mask pointer-events-none" />
         <div className="relative">
           <MarketingNav />
-          <Hero3D />
+          <GlobeHero />
           <TickerTape />
           <MarketPulse />
           <VelocityMarquee />

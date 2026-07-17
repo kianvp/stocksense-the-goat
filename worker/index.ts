@@ -41,6 +41,17 @@ export default {
       return handleProxy(url);
     }
 
+    // Next emits the generated OG image as an extensionless file, so the asset
+    // server can't infer a type and sends it with none — which social crawlers
+    // reject, leaving shared links with no preview image. Stamp the type Next
+    // declared for it.
+    if (url.pathname === "/opengraph-image") {
+      const res = await env.ASSETS.fetch(request);
+      const headers = new Headers(res.headers);
+      headers.set("content-type", "image/png");
+      return new Response(res.body, { status: res.status, headers });
+    }
+
     // Only the app is members-only. The marketing homepage and shared static
     // assets stay public so visitors can see the site before signing in.
     if (isGated(url.pathname)) {
@@ -299,7 +310,7 @@ const LOGIN_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sign in · StockSense</title>
+<title>Sign in · InvestSense</title>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
   :root { color-scheme: dark; }
@@ -330,7 +341,7 @@ const LOGIN_HTML = `<!doctype html>
     <div class="mark">
       <svg viewBox="0 0 24 24" fill="none"><path d="M4 16l5-5 3.5 3L20 7" stroke="#a6d4b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="7" r="2" fill="#a6d4b8"/></svg>
     </div>
-    <h1>Sign in to StockSense</h1>
+    <h1>Sign in to InvestSense</h1>
     <p>This workspace is members-only. Sign in with Google to continue — live markets, portfolio simulator, and AI research.</p>
     <div class="btnwrap">
       <div id="g_id_onload" data-client_id="__CLIENT_ID__" data-callback="onCred" data-auto_prompt="false"></div>

@@ -18,7 +18,7 @@ export function Logo({
     >
       <LogoMark tone={tone} />
       <span className="text-[17px]">
-        Stock<span className={tone === "dark" ? "text-(--color-brand-300)" : "text-(--color-brand-600)"}>Sense</span>
+        Invest<span className={tone === "dark" ? "text-(--color-brand-300)" : "text-(--color-brand-600)"}>Sense</span>
       </span>
     </Link>
   );

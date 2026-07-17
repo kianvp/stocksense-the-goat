@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-// Registers the service worker that makes StockSense installable and keeps the
+// Registers the service worker that makes InvestSense installable and keeps the
 // shell available offline. Production only — a SW caching dev assets makes
 // local hot-reload behave unpredictably.
 export function PwaRegister() {

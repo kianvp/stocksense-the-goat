@@ -1,7 +1,7 @@
 import { LiveDot } from "@/components/ui/Badge";
 import { InstrumentBrowser } from "@/components/market/InstrumentBrowser";
 
-export const metadata = { title: "ETFs — StockSense" };
+export const metadata = { title: "ETFs — InvestSense" };
 
 export default function EtfsPage() {
   return (

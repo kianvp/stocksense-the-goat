@@ -212,7 +212,7 @@ export function QuantEngine() {
             It shows its work.
           </h2>
           <p className="mt-5 max-w-xl text-[15.5px] leading-relaxed text-white/60">
-            No black box. Pick an instrument and watch StockSense pull real daily closes and compute
+            No black box. Pick an instrument and watch InvestSense pull real daily closes and compute
             the indicators live — every formula, with the numbers plugged in.
           </p>
         </div>
@@ -242,7 +242,7 @@ export function QuantEngine() {
             <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2.5">
               <Terminal className="h-3.5 w-3.5 text-(--color-brand-300)" />
               <p className="font-mono text-[11.5px] tracking-tight text-white/60">
-                stocksense://engine/{current.sym.toLowerCase()} · daily
+                investsense://engine/{current.sym.toLowerCase()} · daily
               </p>
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-white/40">
                 <span className={cn("h-1.5 w-1.5 rounded-full", streaming ? "bg-(--color-brand-300) animate-pulse-dot" : "bg-white/30")} />

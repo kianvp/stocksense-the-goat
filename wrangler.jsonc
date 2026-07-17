@@ -1,5 +1,5 @@
 {
-  // StockSense on Cloudflare Workers (free plan, no card).
+  // InvestSense on Cloudflare Workers (free plan, no card).
   // `npm run build` produces a static export in ./out (output: "export").
   // The Worker in ./worker/index.ts runs in FRONT of those assets and enforces
   // Google sign-in server-side — nothing is served without a valid session.

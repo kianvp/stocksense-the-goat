@@ -49,7 +49,7 @@ const FEATURES = [
     eyebrow: "04 — Portfolio tracker",
     title: "Your real holdings. Tracked live.",
     body:
-      "Log the stocks you already own with your average buy price — StockSense streams live prices and shows total value, P&L and sector allocation while you watch.",
+      "Log the stocks you already own with your average buy price — InvestSense streams live prices and shows total value, P&L and sector allocation while you watch.",
     Visual: PortfolioVisual,
   },
   {
@@ -78,7 +78,7 @@ export function FeatureCinema() {
           <div className="hidden lg:block">
             <div className="sticky top-28">
               <p className="text-[11px] uppercase tracking-[0.22em] font-semibold text-(--color-brand-600)">
-                Why StockSense
+                Why InvestSense
               </p>
               <h2 className="mt-3 text-4xl font-semibold tracking-[-0.03em] text-(--color-fg) sm:text-[44px] sm:leading-[1.06]">
                 A full research desk,
@@ -112,7 +112,7 @@ export function FeatureCinema() {
           <div className="space-y-24 lg:space-y-40">
             <div className="lg:hidden">
               <p className="text-[11px] uppercase tracking-[0.22em] font-semibold text-(--color-brand-600)">
-                Why StockSense
+                Why InvestSense
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-(--color-fg)">
                 A full research desk, minus the desk.

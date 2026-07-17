@@ -176,7 +176,7 @@ export function CompareWorkbench() {
         </h1>
         <p className="mt-1 max-w-2xl text-[13.5px] text-(--color-fg-muted)">
           Put two Nifty 50 companies head-to-head. Compare price performance and fundamentals,
-          see a StockSense score for each, and get an AI verdict on which looks stronger today.
+          see a InvestSense score for each, and get an AI verdict on which looks stronger today.
         </p>
       </header>
 
@@ -204,7 +204,7 @@ export function CompareWorkbench() {
       <Card padding="md">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <CardEyebrow>StockSense scorecard</CardEyebrow>
+            <CardEyebrow>InvestSense scorecard</CardEyebrow>
             <p className="mt-1 text-[13px] text-(--color-fg-muted)">
               Head-to-head across six fundamentals. Each bar is a share of the pair — they add up to 100%.
             </p>

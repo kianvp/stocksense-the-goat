@@ -51,7 +51,7 @@ export function Footer() {
         aria-hidden="true"
         className="pointer-events-none absolute -bottom-[0.22em] left-1/2 -translate-x-1/2 select-none whitespace-nowrap text-[21vw] font-semibold leading-none tracking-[-0.05em] text-white/[0.04]"
       >
-        StockSense
+        InvestSense
       </div>
 
       <div className="relative mx-auto max-w-7xl px-5 pt-24 pb-40 sm:pb-48">
@@ -87,7 +87,7 @@ export function Footer() {
 
         <div className="mt-20 flex flex-col items-start justify-between gap-4 border-t border-white/10 pt-8 sm:flex-row sm:items-center">
           <p className="text-[12px] text-white/40">
-            © {new Date().getFullYear()} StockSense Technologies. All rights reserved.
+            © {new Date().getFullYear()} InvestSense Technologies. All rights reserved.
           </p>
           <p className="max-w-md text-[11.5px] leading-relaxed text-white/40 sm:text-right">
             Investments in the securities market are subject to market risks. Read all related

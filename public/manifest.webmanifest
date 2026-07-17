@@ -1,6 +1,6 @@
 {
-  "name": "StockSense — Smarter Stock Decisions, Powered by AI",
-  "short_name": "StockSense",
+  "name": "InvestSense — Smarter Stock Decisions, Powered by AI",
+  "short_name": "InvestSense",
   "description": "Your intelligent companion for the Indian stock market. Live NSE prices, AI research, head-to-head stock comparison and portfolio tracking.",
   "start_url": "./",
   "scope": "./",

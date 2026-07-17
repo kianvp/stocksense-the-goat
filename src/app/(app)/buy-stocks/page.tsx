@@ -99,14 +99,14 @@ export default function BuyStocksPage() {
         </p>
         <h1 className="mt-1 text-[28px] font-semibold tracking-tight">Open a Demat account &amp; start investing</h1>
         <p className="mt-1 max-w-2xl text-[13.5px] text-(--color-fg-muted)">
-          StockSense is not a broker. When you&apos;re ready to invest with real money, pick from these SEBI-registered
+          InvestSense is not a broker. When you&apos;re ready to invest with real money, pick from these SEBI-registered
           brokers. We earn no commission from these links.
         </p>
       </header>
 
       <Card padding="md" className="bg-(--color-brand-50)/40 border-(--color-brand-100)">
         <p className="text-[13px] text-(--color-fg-muted)">
-          <strong className="font-semibold text-(--color-fg)">Before you invest:</strong> You need a Demat account and a Trading account. SEBI mandates KYC. Takes 10-15 minutes online. StockSense earns no commission from these links.
+          <strong className="font-semibold text-(--color-fg)">Before you invest:</strong> You need a Demat account and a Trading account. SEBI mandates KYC. Takes 10-15 minutes online. InvestSense earns no commission from these links.
         </p>
       </Card>
 
@@ -164,7 +164,7 @@ export default function BuyStocksPage() {
       <Card padding="md">
         <CardEyebrow>Disclaimer</CardEyebrow>
         <p className="mt-2 text-[13px] leading-relaxed text-(--color-fg-muted)">
-          StockSense is an educational tool. We are not SEBI-registered investment advisors. Always do your own research.
+          InvestSense is an educational tool. We are not SEBI-registered investment advisors. Always do your own research.
           Investments in the securities market are subject to market risks; read all related documents carefully.
         </p>
       </Card>

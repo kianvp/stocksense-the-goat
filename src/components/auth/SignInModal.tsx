@@ -91,7 +91,7 @@ export function SignInModal() {
         <div className="px-7 pt-9 pb-7">
           <div className="flex items-center gap-2.5">
             <LogoMark />
-            <p className="text-[14px] font-semibold tracking-tight text-(--color-fg)">StockSense</p>
+            <p className="text-[14px] font-semibold tracking-tight text-(--color-fg)">InvestSense</p>
           </div>
           <h2 className="mt-6 text-[26px] font-semibold tracking-[-0.022em] text-(--color-fg)">
             Welcome back.

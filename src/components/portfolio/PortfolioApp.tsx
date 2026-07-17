@@ -22,11 +22,12 @@ import { Delta } from "@/components/ui/Delta";
 import { useLivePrices } from "@/lib/use-live-prices";
 import { NIFTY_50 } from "@/lib/mock-data";
 import { formatINR } from "@/lib/format";
+import { localGet, localSet, storageKey } from "@/lib/storage";
 
-const STORAGE_KEY = "stocksense.holdings.v1";
+const STORAGE_KEY = storageKey("holdings");
 
 // A holding you already own in real life. avgPrice is your own average cost —
-// you can't buy stock on StockSense, so you log what you hold and we track it.
+// you can't buy stock on InvestSense, so you log what you hold and we track it.
 type Holding = { symbol: string; shares: number; avgPrice: number; addedAt: number };
 type State = { holdings: Holding[]; valueTrend: { t: number; v: number }[] };
 
@@ -52,9 +53,8 @@ const SECTOR_COLORS: Record<string, string> = {
 const EMPTY: State = { holdings: [], valueTrend: [] };
 
 function loadState(): State {
-  if (typeof window === "undefined") return EMPTY;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = localGet(STORAGE_KEY);
     if (!raw) return EMPTY;
     const parsed = JSON.parse(raw) as State;
     return {
@@ -83,9 +83,7 @@ export function PortfolioApp() {
   }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+    localSet(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
   const livePrices = useLivePrices(
@@ -189,7 +187,7 @@ export function PortfolioApp() {
           </p>
           <h1 className="mt-1 text-[28px] font-semibold tracking-tight">Track the stocks you already own.</h1>
           <p className="mt-1 max-w-2xl text-[13.5px] text-(--color-fg-muted)">
-            StockSense doesn&apos;t place trades — add the holdings from your real broker account with your
+            InvestSense doesn&apos;t place trades — add the holdings from your real broker account with your
             average buy price, and we&apos;ll track their live value, profit &amp; loss and allocation for you.
           </p>
         </div>

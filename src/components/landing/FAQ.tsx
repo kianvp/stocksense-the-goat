@@ -6,8 +6,8 @@ import { cn } from "@/lib/cn";
 
 const FAQS = [
   {
-    q: "Is StockSense a broker? Can I buy real stocks here?",
-    a: "No. StockSense is a research, tracking and AI assistant — not a broker. When you're ready to invest real money, we point you to SEBI-registered brokers like Zerodha, Groww, Upstox and others.",
+    q: "Is InvestSense a broker? Can I buy real stocks here?",
+    a: "No. InvestSense is a research, tracking and AI assistant — not a broker. When you're ready to invest real money, we point you to SEBI-registered brokers like Zerodha, Groww, Upstox and others.",
   },
   {
     q: "How accurate is the live price data?",
@@ -19,10 +19,10 @@ const FAQS = [
   },
   {
     q: "How does the portfolio tracker work?",
-    a: "Add the stocks you already own with your average buy price. StockSense tracks live value, P&L and sector allocation — all saved on your device. It can't place trades, so your money stays with your broker.",
+    a: "Add the stocks you already own with your average buy price. InvestSense tracks live value, P&L and sector allocation — all saved on your device. It can't place trades, so your money stays with your broker.",
   },
   {
-    q: "Is StockSense free?",
+    q: "Is InvestSense free?",
     a: "Yes, the core product is free. Premium tiers with deeper analytics and more AI tokens are on the roadmap.",
   },
   {

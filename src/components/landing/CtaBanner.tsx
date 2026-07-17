@@ -14,7 +14,7 @@ export function CtaBanner() {
             <span className="block text-(--color-brand-200)">In ten minutes a day.</span>
           </h2>
           <p className="mt-5 text-[16px] leading-relaxed text-white/75">
-            Open a free StockSense account, track the portfolio you already own, put any two
+            Open a free InvestSense account, track the portfolio you already own, put any two
             stocks head-to-head, and run your first AI-powered research session. No card needed.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">

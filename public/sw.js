@@ -1,9 +1,9 @@
-// StockSense service worker — network-first with cache fallback so the app
+// InvestSense service worker — network-first with cache fallback so the app
 // shell keeps working offline. Live-data endpoints are never intercepted.
 // Derives the base path from its own location, so it works both at the domain
-// root (Cloudflare, local dev) and under /stocksense-the-goat on GitHub Pages.
+// root (Cloudflare, local dev) and under a repo subpath on GitHub Pages.
 
-const CACHE = "stocksense-shell-v1";
+const CACHE = "investsense-shell-v1";
 const BASE = self.location.pathname.replace(/\/sw\.js$/, "");
 
 self.addEventListener("install", () => {

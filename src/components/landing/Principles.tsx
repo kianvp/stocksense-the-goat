@@ -22,7 +22,7 @@ const PRINCIPLES = [
   {
     icon: ShieldOff,
     title: "No tips, no hype",
-    body: "StockSense never tells you what to buy. It helps you understand what you're looking at. We're not a SEBI-registered advisor and don't pretend to be.",
+    body: "InvestSense never tells you what to buy. It helps you understand what you're looking at. We're not a SEBI-registered advisor and don't pretend to be.",
   },
   {
     icon: Wallet,
