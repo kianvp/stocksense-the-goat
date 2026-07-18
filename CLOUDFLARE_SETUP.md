@@ -52,6 +52,53 @@ make sure the deploy command is `npx wrangler deploy`.
 - Sign in with Google → the app loads.
 - The account menu's **Sign out** hits `/__logout` and drops you back to the wall.
 
+## User database (D1) + admin page
+
+Every successful Google sign-in is recorded in a **Cloudflare D1** database
+(serverless SQLite, free plan). The `users` table creates itself on first use —
+no migration step.
+
+| Column | Source |
+| --- | --- |
+| `google_id` | Google's stable `sub` claim (primary key) |
+| `email` / `name` / `picture` | from the verified ID token |
+| `created_at` | first sign-in |
+| `last_login` | refreshed on every subsequent sign-in |
+
+Persistence is **best-effort by design**: if the `DB` binding is missing or the
+database errors, the Worker logs it and still signs the user in. Auth never
+depends on the database.
+
+### Turning it on (one-time)
+
+1. **Create the database** — dashboard → *Storage & Databases* → *D1* → *Create*,
+   name it `investsense`. (CLI equivalent: `npx wrangler login` then
+   `npx wrangler d1 create investsense`.) Copy the **Database ID**.
+2. **Uncomment the `d1_databases` block** at the bottom of `wrangler.jsonc` and
+   paste the ID into `database_id`. Deploy fails if this ID is wrong or blank,
+   which is why it ships commented out.
+3. **Add `ADMIN_EMAILS`** under *Settings → Variables and Secrets* as a **Secret**
+   (secrets survive `wrangler deploy`; plaintext vars get wiped). Comma-separated
+   list of emails allowed to see the admin data, e.g. `you@gmail.com`.
+4. **Push.** The table is created on the first sign-in after deploy.
+
+> With `ADMIN_EMAILS` unset the admin routes deny **everyone**, including you —
+> that's the intended fail-closed default.
+
+### Viewing users
+
+- **Page:** `/admin` — table of name, email, date joined, last login.
+- **Raw JSON:** `GET /__admin/users` → `{ "users": [...], "count": n }`
+
+Both require a valid session **and** an email in `ADMIN_EMAILS`. A normal
+signed-in user gets `403`; an anonymous visitor gets `401`/the login wall.
+
+You can also query it directly:
+
+```bash
+npx wrangler d1 execute investsense --remote --command "SELECT * FROM users"
+```
+
 ## Going live on a custom domain (ask-market.ai)
 
 Cloudflare Workers is the only free host that can run this app's sign-in gate:

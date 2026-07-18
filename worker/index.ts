@@ -6,6 +6,18 @@
 
 import { BUILD_SECRET } from "./secret.generated";
 
+/* Minimal structural types for the D1 binding — the project doesn't depend on
+   @cloudflare/workers-types, and ASSETS is declared the same way. */
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  run(): Promise<unknown>;
+  all<T = unknown>(): Promise<{ results?: T[] }>;
+}
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  exec(query: string): Promise<unknown>;
+}
+
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   GOOGLE_CLIENT_ID: string;
@@ -13,6 +25,14 @@ interface Env {
   SESSION_SECRET?: string;
   /** Optional comma-separated allowlist. Empty = any Google account. */
   ALLOWED_EMAILS?: string;
+  /**
+   * D1 user store. OPTIONAL on purpose: if the binding isn't configured the
+   * Worker still authenticates normally and simply skips persistence, so
+   * sign-in can never break because of the database.
+   */
+  DB?: D1Database;
+  /** Comma-separated emails allowed to read /__admin/users. Unset = nobody. */
+  ADMIN_EMAILS?: string;
 }
 
 const SESSION_COOKIE = "ss_session"; // HttpOnly, signed — the actual gate
@@ -39,6 +59,19 @@ export default {
     // the browser isn't blocked by CORS or flaky third-party proxies.
     if (url.pathname === "/__proxy") {
       return handleProxy(url);
+    }
+
+    // Admin API — signed-in AND on the ADMIN_EMAILS allowlist.
+    if (url.pathname === "/__admin/users") {
+      return handleAdminUsers(request, env);
+    }
+
+    // The admin page itself is admin-only too (defence in depth: the endpoint
+    // is the real boundary, but there's no reason to serve the shell either).
+    if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) {
+      const session = await getValidSession(request, env);
+      if (!session) return loginPage(env, url);
+      if (!isAdmin(env, session.email)) return forbiddenPage();
     }
 
     // Next emits the generated OG image as an extensionless file, so the asset
@@ -70,6 +103,7 @@ const GATED_PREFIXES = [
   "/market",
   "/stocks",
   "/etfs",
+  "/compare", // was missing — /compare/ was being served to anonymous visitors
   "/portfolio",
   "/watchlist",
   "/ask-ai",
@@ -79,6 +113,7 @@ const GATED_PREFIXES = [
   "/recently-viewed",
   "/quote",
   "/quant",
+  "/admin",
 ];
 
 function isGated(pathname: string): boolean {
@@ -91,6 +126,8 @@ function isGated(pathname: string): boolean {
 
 interface TokenInfo {
   aud?: string;
+  /** Google's stable account identifier. */
+  sub?: string;
   email?: string;
   email_verified?: string | boolean;
   name?: string;
@@ -138,6 +175,11 @@ async function handleAuthInner(request: Request, env: Env): Promise<Response> {
   if (allow.length && !allow.includes(email)) {
     return json({ error: "This account isn't on the allowlist." }, 403);
   }
+
+  // Persist the account. Deliberately after every verification step (so only
+  // genuine, allowlisted sign-ins are stored) and deliberately non-fatal — a
+  // database problem must never stop someone signing in.
+  await recordSignIn(env, info, email);
 
   const exp = Math.floor(Date.now() / 1000) + TTL;
   const payload = `${email}|${exp}`;
@@ -188,6 +230,100 @@ function logout(url: URL): Response {
   headers.append("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; ${expired}`);
   headers.append("Set-Cookie", `${IDENTITY_COOKIE}=; ${expired}`);
   return new Response(null, { status: 302, headers });
+}
+
+/* ------------------------------------------------------------- user store */
+
+export interface StoredUser {
+  google_id: string;
+  email: string;
+  name: string | null;
+  picture: string | null;
+  created_at: string;
+  last_login: string;
+}
+
+// Isolates are reused between requests, so the DDL only needs to run once per
+// isolate rather than on every sign-in.
+let schemaReady = false;
+
+async function ensureSchema(db: D1Database): Promise<void> {
+  if (schemaReady) return;
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS users (google_id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT, picture TEXT, created_at TEXT NOT NULL, last_login TEXT NOT NULL)",
+  );
+  await db.exec("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)");
+  schemaReady = true;
+}
+
+/**
+ * Insert the account on first sign-in, otherwise just refresh last_login (and
+ * name/picture, which can change on the Google side). Never throws: persistence
+ * is best-effort so a database fault can't lock anyone out.
+ */
+async function recordSignIn(env: Env, info: TokenInfo, email: string): Promise<void> {
+  if (!env.DB) return; // binding not configured — skip silently
+  try {
+    await ensureSchema(env.DB);
+    const now = new Date().toISOString();
+    // `sub` is Google's stable ID; fall back to email so a row is still written
+    // if a token somehow lacks it.
+    const googleId = info.sub || email;
+    await env.DB.prepare(
+      `INSERT INTO users (google_id, email, name, picture, created_at, last_login)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(google_id) DO UPDATE SET
+         last_login = excluded.last_login,
+         name       = excluded.name,
+         picture    = excluded.picture,
+         email      = excluded.email`,
+    )
+      .bind(googleId, email, info.name ?? null, info.picture ?? null, now, now)
+      .run();
+  } catch (e) {
+    console.error("recordSignIn failed:", e instanceof Error ? e.message : String(e));
+  }
+}
+
+/* ------------------------------------------------------------------ admin */
+
+/** Fails closed: with ADMIN_EMAILS unset, nobody is an admin. */
+function isAdmin(env: Env, email: string): boolean {
+  const admins = (env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return admins.length > 0 && admins.includes(email.toLowerCase());
+}
+
+async function handleAdminUsers(request: Request, env: Env): Promise<Response> {
+  const session = await getValidSession(request, env);
+  if (!session) return json({ error: "unauthorized" }, 401);
+  if (!isAdmin(env, session.email)) return json({ error: "forbidden" }, 403);
+  if (!env.DB) {
+    return json({ error: "database not configured", users: [], count: 0 }, 503);
+  }
+  try {
+    await ensureSchema(env.DB);
+    const { results } = await env.DB.prepare(
+      "SELECT google_id, email, name, picture, created_at, last_login FROM users ORDER BY created_at DESC",
+    ).all<StoredUser>();
+    const users = results ?? [];
+    return json({ users, count: users.length });
+  } catch (e) {
+    return json({ error: "query failed: " + (e instanceof Error ? e.message : String(e)) }, 500);
+  }
+}
+
+function forbiddenPage(): Response {
+  return new Response(
+    `<!doctype html><meta charset="utf-8"><title>403 · InvestSense</title>` +
+      `<div style="font-family:system-ui;background:#041a11;color:#fff;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px">` +
+      `<h1 style="margin:0;font-size:20px">Admins only</h1>` +
+      `<p style="margin:0;color:#9ec5b0;font-size:14px">This account doesn't have access to the admin area.</p>` +
+      `<a href="/dashboard" style="color:#5eead4;font-size:14px">Back to dashboard</a></div>`,
+    { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+  );
 }
 
 /* ---------------------------------------------------- market-data proxy */

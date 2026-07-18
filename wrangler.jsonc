@@ -21,4 +21,27 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   }
+
+  // ---------------------------------------------------------------------
+  // USER DATABASE (D1) — currently OFF. Sign-in works without it; accounts
+  // simply aren't recorded and /__admin/users answers 503.
+  //
+  // To switch it on (one-time, ~2 minutes):
+  //   1. Cloudflare dashboard → Storage & Databases → D1 → Create database,
+  //      name it `investsense` (or run: npx wrangler d1 create investsense).
+  //   2. Copy the Database ID it gives you.
+  //   3. Uncomment the block below and paste the ID into database_id.
+  //   4. Add ADMIN_EMAILS as a dashboard *Secret* (see CLOUDFLARE_SETUP.md).
+  //   5. Push. The `users` table creates itself on the first sign-in.
+  //
+  // Leave database_id empty/wrong and `wrangler deploy` FAILS, so only
+  // uncomment once you have the real ID.
+  //
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "investsense",
+  //     "database_id": "PASTE-YOUR-DATABASE-ID-HERE"
+  //   }
+  // ]
 }
