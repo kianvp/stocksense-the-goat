@@ -377,6 +377,47 @@ section("Bull/bear score — z-scores & CDF");
     `${mk(base).score} vs ${mk(scaled).score}`);
 }
 
+/* -------------------------------------------- 12. Responsive chart sizing */
+
+section("Responsive chart metrics");
+{
+  const metricsPath = loadTs("src/lib/chart-metrics.ts", "chart-metrics.mjs");
+  const M = await import(pathToFileURL(metricsPath).href);
+  const at = (w) => M.chartMetrics(w);
+
+  // Real device widths (minus the page gutters the chart actually sits in).
+  const devices = [
+    { name: "iPhone SE", w: 320 },
+    { name: "iPhone 14", w: 358 },
+    { name: "tablet portrait", w: 700 },
+    { name: "laptop", w: 1100 },
+    { name: "desktop wide", w: 1600 },
+  ];
+
+  for (const d of devices) {
+    const m = at(d.w);
+    assert(`${d.name} (${d.w}px): height sane`, m.h >= 300 && m.h <= 420, `h=${m.h}`);
+    assert(`${d.name}: gutter fits a price tag`, m.rightGutter >= 54, `r=${m.rightGutter}`);
+    // Date labels are ~58px; ticks must not be able to collide.
+    const plotW = m.w - 8 - m.rightGutter;
+    const spacing = plotW / Math.max(1, m.xTickCount - 1);
+    assert(`${d.name}: x ticks can't collide`, spacing >= 58, `spacing=${spacing.toFixed(0)}px @ ${m.xTickCount} ticks`);
+    assert(`${d.name}: plot keeps positive width`, plotW > 40, `plotW=${plotW}`);
+  }
+
+  // Monotonicity: never shrink height/ticks as the screen grows.
+  let okMono = true;
+  for (let w = 280; w <= 1920; w += 20) {
+    const a = at(w), b = at(w + 20);
+    if (b.h < a.h || b.xTickCount < a.xTickCount) okMono = false;
+  }
+  assert("height and tick count are monotone in width", okMono);
+
+  // Degenerate inputs must not produce NaN geometry.
+  assert("clamps below the mobile floor", at(0).w === M.MIN_CHART_WIDTH && at(-50).w === M.MIN_CHART_WIDTH);
+  assert("survives NaN width", Number.isFinite(at(NaN).w) && Number.isFinite(at(NaN).h));
+}
+
 /* ---------------------------------------------------------------- done */
 
 console.log(`\n${"=".repeat(68)}`);

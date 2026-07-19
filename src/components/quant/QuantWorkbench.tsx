@@ -208,6 +208,13 @@ export function QuantWorkbench() {
     [candles],
   );
 
+  // Inline objects get a fresh identity each render, which would invalidate the
+  // chart's internal useMemos (geometry + path building) on every parent update.
+  const chartEnabled = useMemo(
+    () => ({ ...toggles, forecast: toggles.forecast && stage >= 3 }),
+    [toggles, stage],
+  );
+
   const chartOverlays = useMemo<Overlays>(
     () =>
       computed
@@ -454,7 +461,7 @@ Return JSON only: {"summary": "2-3 plain-English sentences a beginner understand
                 levels={computed.levels}
                 forecast={computed.forecast}
                 unit={unit}
-                enabled={{ ...toggles, forecast: toggles.forecast && stage >= 3 }}
+                enabled={chartEnabled}
               />
             </div>
           </div>

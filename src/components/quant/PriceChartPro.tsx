@@ -11,8 +11,9 @@
 // labels out of the plot. Nothing here is stretched; vector output stays crisp
 // at any DPR.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmt, type Level } from "@/lib/quant";
+import { chartMetrics } from "@/lib/chart-metrics";
 import type { EnsembleForecast } from "@/lib/forecast";
 
 /* ------------------------------------------------------------------ types */
@@ -125,7 +126,7 @@ const fmtVol = (v: number) =>
 
 /* ---------------------------------------------------------------- chart */
 
-export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled }: ChartProps) {
+function PriceChartProInner({ bars, overlays, levels, forecast, unit, enabled }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 900, h: 420 });
   const [hover, setHover] = useState<number | null>(null);
@@ -135,9 +136,12 @@ export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled 
     const el = wrapRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
-      const w = Math.max(320, Math.round(entry.contentRect.width));
-      setSize({ w, h: w < 560 ? 300 : w < 900 ? 360 : 420 });
+      const m = chartMetrics(entry.contentRect.width);
+      setSize({ w: m.w, h: m.h });
     });
+    // Measure immediately too — ResizeObserver's first callback can lag paint.
+    const m0 = chartMetrics(el.getBoundingClientRect().width);
+    setSize({ w: m0.w, h: m0.h });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -149,7 +153,7 @@ export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled 
     const { w, h } = size;
     // Generous right gutter for the price axis + pinned last-price tag, so
     // nothing clips (the old chart reserved 10px and overlapped).
-    const pad = { l: 8, r: 74, t: 16, b: 30 };
+    const pad = { l: 8, r: chartMetrics(w).rightGutter, t: 16, b: 30 };
     const volH = showVolume ? Math.round(h * 0.18) : 0;
     const plotTop = pad.t;
     const plotBottom = h - pad.b - volH - (showVolume ? 8 : 0);
@@ -258,7 +262,7 @@ export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled 
   // ---- axis ticks ----
   const yTicks = useMemo(() => niceTicks(geom.min, geom.max, 5), [geom.min, geom.max]);
   const xTicks = useMemo(() => {
-    const count = geom.w < 560 ? 3 : geom.w < 900 ? 5 : 7;
+    const count = chartMetrics(geom.w).xTickCount;
     const step = Math.max(1, Math.floor((bars.length - 1) / (count - 1)));
     const out: number[] = [];
     for (let i = 0; i < bars.length; i += step) out.push(i);
@@ -293,6 +297,33 @@ export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled 
     [geom.pad.l, geom.plotW, geom.total, lastIdx],
   );
 
+  /**
+   * Keyboard equivalent of the crosshair. Without this the entire chart is
+   * mouse-only: ~120 data points reachable by no other means. Arrows step one
+   * bar, PageUp/Down jump a week, Home/End go to the ends, Escape dismisses.
+   */
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<SVGSVGElement>) => {
+      const step = (delta: number) => {
+        e.preventDefault();
+        setHover((h) => {
+          const base = h ?? lastIdx;
+          return Math.max(0, Math.min(lastIdx, base + delta));
+        });
+      };
+      switch (e.key) {
+        case "ArrowRight": return step(1);
+        case "ArrowLeft": return step(-1);
+        case "PageUp": return step(5);
+        case "PageDown": return step(-5);
+        case "Home": e.preventDefault(); return setHover(0);
+        case "End": e.preventDefault(); return setHover(lastIdx);
+        case "Escape": return setHover(null);
+      }
+    },
+    [lastIdx],
+  );
+
   const hb = hover !== null ? bars[hover] : null;
   const prevClose = hover !== null && hover > 0 ? bars[hover - 1].close : null;
 
@@ -306,12 +337,20 @@ export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled 
           // Deliberately NOT `w-full`: the element is sized to the measured
           // width so one viewBox unit maps to exactly one CSS pixel. Letting
           // CSS stretch it would reintroduce non-uniform scaling.
-          className="block touch-pan-y select-none"
+          className="block touch-pan-y select-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-(--color-brand-400)"
           style={{ width: geom.w, height: geom.h }}
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
-          role="img"
-          aria-label="Price chart with technical overlays and forecast"
+          onKeyDown={onKeyDown}
+          onFocus={() => setHover((h) => h ?? lastIdx)}
+          onBlur={() => setHover(null)}
+          tabIndex={0}
+          role="application"
+          aria-label={
+            `Price chart, ${bars.length} daily bars from ${fmtDate(bars[0].time)} to ${fmtDate(last.time)}. ` +
+            `Use arrow keys to read individual bars.`
+          }
+          aria-describedby="chart-kbd-help"
         >
           <defs>
             <linearGradient id="pc-fill" x1="0" y1="0" x2="0" y2="1">
@@ -483,6 +522,67 @@ export function PriceChartPro({ bars, overlays, levels, forecast, unit, enabled 
           </div>
         )}
       </div>
+
+      {/* ---------------------- assistive-technology layer ---------------------- */}
+
+      <p id="chart-kbd-help" className="sr-only">
+        Arrow keys move one bar, Page Up and Page Down move five bars, Home and End
+        jump to the first and last bar, Escape clears the selection.
+      </p>
+
+      {/* Announces the focused bar. Polite so it never interrupts, and atomic so
+          the whole reading is spoken as one phrase rather than field by field. */}
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {hb
+          ? `${fmtDate(hb.time)}: close ${unit}${fmt(hb.close)}` +
+            (hb.open != null ? `, open ${unit}${fmt(hb.open)}` : "") +
+            (hb.high != null ? `, high ${unit}${fmt(hb.high)}` : "") +
+            (hb.low != null ? `, low ${unit}${fmt(hb.low)}` : "") +
+            (prevClose != null
+              ? `, ${hb.close >= prevClose ? "up" : "down"} ${Math.abs((hb.close / prevClose - 1) * 100).toFixed(2)} percent`
+              : "") +
+            (hb.volume != null ? `, volume ${fmtVol(hb.volume)}` : "")
+          : ""}
+      </p>
+
+      {/* The full series as a real table. This is the part that actually makes
+          the data available to a screen reader — a canvas/SVG drawing is opaque
+          to assistive tech no matter how it is labelled. */}
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[11px] text-(--color-fg-subtle) hover:text-(--color-fg-muted)">
+          View chart data as a table
+        </summary>
+        <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-(--color-border)">
+          <table className="w-full text-left text-[11px]">
+            <caption className="sr-only">
+              Daily price data: date, open, high, low, close and volume for each bar.
+            </caption>
+            <thead className="sticky top-0 bg-(--color-surface-2)">
+              <tr>
+                {["Date", "Open", "High", "Low", "Close", "Volume"].map((h) => (
+                  <th key={h} scope="col" className="px-2 py-1.5 font-semibold text-(--color-fg-subtle)">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="tabular">
+              {bars.map((b) => (
+                <tr key={b.time} className="border-t border-(--color-border)">
+                  <th scope="row" className="whitespace-nowrap px-2 py-1 font-normal text-(--color-fg-muted)">
+                    {fmtDate(b.time)}
+                  </th>
+                  <td className="px-2 py-1">{b.open != null ? fmt(b.open) : "—"}</td>
+                  <td className="px-2 py-1">{b.high != null ? fmt(b.high) : "—"}</td>
+                  <td className="px-2 py-1">{b.low != null ? fmt(b.low) : "—"}</td>
+                  <td className="px-2 py-1 font-medium">{fmt(b.close)}</td>
+                  <td className="px-2 py-1">{b.volume != null ? fmtVol(b.volume) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }
@@ -501,3 +601,7 @@ function Row({ k, v, strong, tone }: { k: string; v: string; strong?: boolean; t
     </div>
   );
 }
+
+/** Memoised: with stable props from the workbench, hovering or toggling a
+ *  sibling control no longer re-runs path building for ~120 bars. */
+export const PriceChartPro = memo(PriceChartProInner);
