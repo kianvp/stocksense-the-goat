@@ -3,9 +3,25 @@
 
 export type Series = number[];
 
+/** Simple (arithmetic) returns: rₜ = (Pₜ − Pₜ₋₁)/Pₜ₋₁. */
 export function returns(prices: Series): Series {
   const out: Series = [];
   for (let i = 1; i < prices.length; i++) out.push((prices[i] - prices[i - 1]) / prices[i - 1]);
+  return out;
+}
+
+/**
+ * Log (continuously-compounded) returns: rₜ = ln(Pₜ / Pₜ₋₁).
+ *
+ * The correct basis for volatility work: log returns are additive across time,
+ * so σ scales by √t, which is what the √252 annualisation assumes. Simple
+ * returns are not additive and bias σ upward for volatile series.
+ */
+export function logReturns(prices: Series): Series {
+  const out: Series = [];
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i - 1] > 0 && prices[i] > 0) out.push(Math.log(prices[i] / prices[i - 1]));
+  }
   return out;
 }
 
@@ -32,33 +48,86 @@ export function smaLine(prices: Series, period: number): number[] {
   return prices.map((_, i) => (i + 1 < period ? NaN : mean(prices.slice(i + 1 - period, i + 1))));
 }
 
-/** Exponential moving average — returns the final value and the smoothing k. */
+/**
+ * Exponential moving average, seeded the standard way.
+ *
+ *   k    = 2/(period+1)
+ *   EMA₀ = SMA(first `period` values)            ← seed
+ *   EMAₜ = Pₜ·k + EMAₜ₋₁·(1−k)
+ *
+ * The seed matters: priming with a single price (EMA₀ = P₀) leaves the first
+ * ~2·period values badly biased, and because MACD subtracts two EMAs of
+ * *different* lengths, that bias does not cancel — it produces a spurious
+ * early MACD signal. Values before the seed are NaN (genuinely undefined)
+ * rather than silently fabricated.
+ */
 export function ema(prices: Series, period: number): { value: number; k: number; line: number[] } {
   const k = 2 / (period + 1);
-  const line: number[] = [];
-  let prev = prices[0];
-  line.push(prev);
-  for (let i = 1; i < prices.length; i++) {
+  const line: number[] = new Array(prices.length).fill(NaN);
+  if (prices.length < period) return { value: NaN, k, line };
+
+  let prev = mean(prices.slice(0, period));
+  line[period - 1] = prev;
+  for (let i = period; i < prices.length; i++) {
     prev = prices[i] * k + prev * (1 - k);
-    line.push(prev);
+    line[i] = prev;
   }
   return { value: prev, k, line };
 }
 
-export type RsiResult = { rsi: number; avgGain: number; avgLoss: number; rs: number; period: number };
+export type RsiResult = {
+  rsi: number;
+  avgGain: number;
+  avgLoss: number;
+  rs: number;
+  period: number;
+  line: number[];
+};
 
-/** RSI over `period` (default 14), simple-average variant. */
+/**
+ * Wilder's Relative Strength Index (New Concepts in Technical Trading, 1978).
+ *
+ *   seed:  avgGain = Σgain(1..n)/n,  avgLoss = Σloss(1..n)/n
+ *   step:  avgGainₜ = (avgGainₜ₋₁·(n−1) + gainₜ)/n     ← Wilder smoothing
+ *          avgLossₜ = (avgLossₜ₋₁·(n−1) + lossₜ)/n
+ *   RS    = avgGain/avgLoss
+ *   RSI   = 100 − 100/(1+RS)
+ *
+ * The previous implementation averaged only the most recent `period` deltas
+ * with no recursive smoothing. That is a different (and much noisier)
+ * indicator: Wilder's RSI carries the entire history forward with decay, so
+ * on real series the two can differ by 10+ points and cross the 30/70
+ * thresholds at different times.
+ */
 export function rsi(prices: Series, period = 14): RsiResult {
-  const deltas: number[] = [];
-  for (let i = 1; i < prices.length; i++) deltas.push(prices[i] - prices[i - 1]);
-  const window = deltas.slice(-period);
-  const gains = window.filter((d) => d > 0);
-  const losses = window.filter((d) => d < 0).map((d) => -d);
-  const avgGain = gains.length ? gains.reduce((a, b) => a + b, 0) / period : 0;
-  const avgLoss = losses.length ? losses.reduce((a, b) => a + b, 0) / period : 0;
+  const line: number[] = new Array(prices.length).fill(NaN);
+  if (prices.length < period + 1) {
+    return { rsi: NaN, avgGain: NaN, avgLoss: NaN, rs: NaN, period, line };
+  }
+
+  const gains: number[] = [];
+  const losses: number[] = [];
+  for (let i = 1; i < prices.length; i++) {
+    const d = prices[i] - prices[i - 1];
+    gains.push(Math.max(0, d));
+    losses.push(Math.max(0, -d));
+  }
+
+  // Seed with the simple average of the first `period` changes.
+  let avgGain = mean(gains.slice(0, period));
+  let avgLoss = mean(losses.slice(0, period));
+  const rsiFrom = (g: number, l: number) => (l === 0 ? 100 : 100 - 100 / (1 + g / l));
+  line[period] = rsiFrom(avgGain, avgLoss);
+
+  // gains[i] corresponds to prices[i+1].
+  for (let i = period; i < gains.length; i++) {
+    avgGain = (avgGain * (period - 1) + gains[i]) / period;
+    avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+    line[i + 1] = rsiFrom(avgGain, avgLoss);
+  }
+
   const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
-  const rsiVal = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs);
-  return { rsi: rsiVal, avgGain, avgLoss, rs, period };
+  return { rsi: rsiFrom(avgGain, avgLoss), avgGain, avgLoss, rs, period, line };
 }
 
 export type Bollinger = { mid: number; upper: number; lower: number; sigma: number; period: number; width: number };
@@ -74,9 +143,18 @@ export function bollinger(prices: Series, period = 20, mult = 2): Bollinger {
 
 export type Volatility = { daily: number; annualized: number; n: number };
 
-/** Return volatility from daily returns, annualised by √252. */
+/**
+ * Realised volatility from LOG returns, annualised over 252 trading days:
+ *
+ *   σ_daily  = stdev( ln(Pₜ/Pₜ₋₁) )          (sample, n−1)
+ *   σ_annual = σ_daily · √252
+ *
+ * Log returns are used because the √t scaling rule is only valid for an
+ * additive series. Using simple returns here (the previous behaviour)
+ * overstates σ, and the error grows with volatility.
+ */
 export function volatility(prices: Series): Volatility {
-  const rs = returns(prices);
+  const rs = logReturns(prices);
   const daily = stdDev(rs, true);
   return { daily, annualized: daily * Math.sqrt(252), n: rs.length };
 }
@@ -87,9 +165,27 @@ export type Regression = {
   r2: number;
   forecast: number[];
   fitted: number[];
+  /** Standard error of the slope estimate. */
+  seSlope: number;
+  /** t = β/SE(β) — how many standard errors the trend sits from zero. */
+  tStat: number;
+  /** Residual standard error (√ of the unbiased residual variance). */
+  residualSe: number;
 };
 
-/** Ordinary least squares of price on time index, plus an h-step forecast. */
+/**
+ * Ordinary least squares of price on the time index, with inference:
+ *
+ *   β  = Σ(xᵢ−x̄)(yᵢ−ȳ) / Σ(xᵢ−x̄)²
+ *   α  = ȳ − β·x̄
+ *   s² = SSres/(n−2)                       (unbiased residual variance)
+ *   SE(β) = √( s² / Σ(xᵢ−x̄)² )
+ *   t  = β / SE(β)
+ *
+ * The t-statistic is what makes trend comparable across instruments: a slope
+ * of ₹2/bar is meaningless on its own, but "3.4 standard errors above zero"
+ * is the same statement for any stock at any price level.
+ */
 export function linearRegression(prices: Series, horizon = 7): Regression {
   const n = prices.length;
   const xs = Array.from({ length: n }, (_, i) => i);
@@ -112,20 +208,39 @@ export function linearRegression(prices: Series, horizon = 7): Regression {
     ssTot += (prices[i] - my) ** 2;
   }
   const r2 = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
+  // Inference on the slope. Needs n > 2 for an unbiased residual variance.
+  const residualVar = n > 2 ? ssRes / (n - 2) : 0;
+  const residualSe = Math.sqrt(residualVar);
+  const seSlope = den > 0 && residualVar > 0 ? Math.sqrt(residualVar / den) : 0;
+  const tStat = seSlope > 0 ? slope / seSlope : 0;
   const forecast = Array.from({ length: horizon }, (_, h) => slope * (n - 1 + h + 1) + intercept);
-  return { slope, intercept, r2, forecast, fitted };
+  return { slope, intercept, r2, forecast, fitted, seSlope, tStat, residualSe };
 }
 
 export type Sharpe = { sharpe: number; meanRet: number; sigma: number; rf: number };
 
-/** Annualised Sharpe ratio from daily returns (rf is an annual rate). */
+/**
+ * Annualised Sharpe ratio on log returns:
+ *
+ *   μ_annual = mean(ln-returns) · 252        (continuously compounded)
+ *   σ_annual = stdev(ln-returns) · √252
+ *   Sharpe   = (μ_annual − r_f) / σ_annual
+ *
+ * Both legs use log returns so the numerator and denominator are annualised
+ * on the same basis — mixing arithmetic drift with √t-scaled σ (the previous
+ * behaviour) inflates the ratio. `rf` is an annual rate (default 6.5%, a
+ * reasonable Indian risk-free proxy).
+ */
 export function sharpe(prices: Series, rf = 0.065): Sharpe {
-  const rs = returns(prices);
+  const rs = logReturns(prices);
   const meanRet = mean(rs);
   const sigma = stdDev(rs, true);
   const annRet = meanRet * 252;
   const annVol = sigma * Math.sqrt(252);
-  const sh = annVol === 0 ? 0 : (annRet - rf) / annVol;
+  // Guard on an epsilon, not on exact zero: a series with (near-)constant
+  // returns leaves σ at ~1e-17 of floating-point noise rather than a clean 0,
+  // and dividing by that produces a meaningless multi-trillion Sharpe.
+  const sh = annVol < 1e-12 ? 0 : (annRet - rf) / annVol;
   return { sharpe: sh, meanRet, sigma, rf };
 }
 
@@ -143,13 +258,37 @@ export type Macd = {
   signalPeriod: number;
 };
 
-/** MACD(12,26,9): EMA_fast − EMA_slow, signal = EMA9 of MACD, hist = MACD − signal. */
+/**
+ * MACD(12, 26, 9):
+ *
+ *   MACDₜ   = EMA_fast(P)ₜ − EMA_slow(P)ₜ
+ *   signalₜ = EMA_signal(MACD)ₜ
+ *   histₜ   = MACDₜ − signalₜ
+ *
+ * Both EMAs are SMA-seeded, so MACD is undefined until the slow EMA exists
+ * (index slow−1). The signal EMA is then seeded from the *first valid* MACD
+ * value and mapped back to the original indices — running it over the raw
+ * array would seed it from NaN (or, before the EMA fix, from fabricated
+ * early values) and shift every crossover.
+ */
 export function macd(prices: Series, fast = 12, slow = 26, signalPeriod = 9): Macd {
   const eFast = ema(prices, fast).line;
   const eSlow = ema(prices, slow).line;
-  const macdLine = prices.map((_, i) => eFast[i] - eSlow[i]);
-  const signalLine = ema(macdLine, signalPeriod).line;
-  const hist = macdLine.map((m, i) => m - signalLine[i]);
+  const macdLine = prices.map((_, i) =>
+    isNaN(eFast[i]) || isNaN(eSlow[i]) ? NaN : eFast[i] - eSlow[i],
+  );
+
+  const firstValid = macdLine.findIndex((v) => !isNaN(v));
+  const signalLine: number[] = new Array(prices.length).fill(NaN);
+  if (firstValid >= 0) {
+    const valid = macdLine.slice(firstValid);
+    const sig = ema(valid, signalPeriod).line;
+    for (let i = 0; i < sig.length; i++) signalLine[firstValid + i] = sig[i];
+  }
+
+  const hist = macdLine.map((m, i) =>
+    isNaN(m) || isNaN(signalLine[i]) ? NaN : m - signalLine[i],
+  );
   return {
     macd: macdLine,
     signal: signalLine,
@@ -188,21 +327,62 @@ export function atr(bars: Ohlc[], period = 14): Atr | null {
 
 /* -------------------------------------------------- support / resistance */
 
+/** A price zone, not a single tick: several swings clustered into one level. */
+export type Level = {
+  /** Touch-weighted centre of the cluster. */
+  price: number;
+  /** How many swing points formed it — a proxy for how "respected" it is. */
+  touches: number;
+  /** 0–1 strength: touches scaled against the strongest level found. */
+  strength: number;
+};
+
 export type Levels = {
-  supports: number[]; // nearest below price, descending
-  resistances: number[]; // nearest above price, ascending
-  pivot: { p: number; r1: number; s1: number };
+  supports: Level[]; // nearest below price first
+  resistances: Level[]; // nearest above price first
+  pivot: { p: number; r1: number; s1: number; r2: number; s2: number };
 };
 
 /**
- * Swing-point S/R: fractal highs/lows (extreme vs 2 neighbours each side),
- * split around the current price; plus the classic floor-trader pivot from
- * the latest bar: P=(H+L+C)/3, R1=2P−L, S1=2P−H.
+ * Cluster raw swing prices into zones. Any two swings within `tol` (an
+ * absolute price distance, normally a fraction of ATR) collapse into one
+ * level positioned at the mean of its members.
  */
-export function supportResistance(bars: Ohlc[], maxLevels = 2): Levels | null {
+function clusterLevels(raw: number[], tol: number): Level[] {
+  if (raw.length === 0) return [];
+  const sorted = [...raw].sort((a, b) => a - b);
+  const groups: number[][] = [[sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    const g = groups[groups.length - 1];
+    // Compare against the running mean so a long drift doesn't chain-merge.
+    if (Math.abs(sorted[i] - mean(g)) <= tol) g.push(sorted[i]);
+    else groups.push([sorted[i]]);
+  }
+  const maxTouches = Math.max(...groups.map((g) => g.length));
+  return groups.map((g) => ({
+    price: mean(g),
+    touches: g.length,
+    strength: maxTouches > 0 ? g.length / maxTouches : 0,
+  }));
+}
+
+/**
+ * Swing-point support/resistance.
+ *
+ * Fractal pivots (a bar whose high/low is the extreme of its 2 neighbours on
+ * each side) are collected, then **clustered** so that near-identical swings
+ * become a single zone with a touch count. The previous version de-duplicated
+ * only exact matches, so 1,204.10 and 1,204.85 were reported as two separate
+ * levels — which is what produced stacked, overlapping labels on the chart.
+ *
+ * Also returns the floor-trader pivot set from the latest bar:
+ *   P = (H+L+C)/3,  R1 = 2P−L,  S1 = 2P−H,  R2 = P+(H−L),  S2 = P−(H−L)
+ */
+export function supportResistance(bars: Ohlc[], maxLevels = 3): Levels | null {
   if (bars.length < 10) return null;
   const last = bars[bars.length - 1];
   const price = last.close;
+
   const swingHighs: number[] = [];
   const swingLows: number[] = [];
   for (let i = 2; i < bars.length - 2; i++) {
@@ -215,14 +395,26 @@ export function supportResistance(bars: Ohlc[], maxLevels = 2): Levels | null {
       swingLows.push(l);
     }
   }
-  const resistances = Array.from(new Set(swingHighs.filter((h) => h > price)))
-    .sort((a, b) => a - b)
+
+  // Cluster tolerance: half an ATR, falling back to 0.5% of price when ATR
+  // isn't computable. Scales with the instrument instead of being a fixed tick.
+  const a = atr(bars, Math.min(14, bars.length - 1));
+  const tol = a ? a.atr * 0.5 : price * 0.005;
+
+  const resistances = clusterLevels(swingHighs.filter((h) => h > price), tol)
+    .sort((x, y) => x.price - y.price)
     .slice(0, maxLevels);
-  const supports = Array.from(new Set(swingLows.filter((l) => l < price)))
-    .sort((a, b) => b - a)
+  const supports = clusterLevels(swingLows.filter((l) => l < price), tol)
+    .sort((x, y) => y.price - x.price)
     .slice(0, maxLevels);
+
   const p = (last.high + last.low + last.close) / 3;
-  return { supports, resistances, pivot: { p, r1: 2 * p - last.low, s1: 2 * p - last.high } };
+  const range = last.high - last.low;
+  return {
+    supports,
+    resistances,
+    pivot: { p, r1: 2 * p - last.low, s1: 2 * p - last.high, r2: p + range, s2: p - range },
+  };
 }
 
 /* --------------------------------------------------------- pattern scan */

@@ -36,6 +36,7 @@ import {
   type Ohlc,
 } from "@/lib/quant";
 import { ensembleForecast, type EnsembleForecast } from "@/lib/forecast";
+import { PriceChartPro, type ToggleKey, type ChartBar, type Overlays } from "./PriceChartPro";
 import { bullBearScore, type BullBearScore } from "@/lib/signals";
 import { generateJson, hasGeminiKey } from "@/lib/api/gemini";
 import { useCountUp } from "@/lib/use-reveal";
@@ -56,6 +57,23 @@ const STAGES = [
   { id: 4, label: "AI analysis", icon: Sparkles },
 ];
 
+const TOGGLE_DEFS: { key: ToggleKey; label: string }[] = [
+  { key: "sma20", label: "SMA 20" },
+  { key: "sma50", label: "SMA 50" },
+  { key: "ema20", label: "EMA 20" },
+  { key: "ema50", label: "EMA 50" },
+  { key: "bollinger", label: "Bollinger" },
+  { key: "levels", label: "S/R" },
+  { key: "forecast", label: "Forecast" },
+  { key: "regression", label: "Regression" },
+  { key: "volume", label: "Volume" },
+];
+
+const DEFAULT_TOGGLES: Record<ToggleKey, boolean> = {
+  sma20: true, sma50: true, ema20: false, ema50: false,
+  bollinger: true, levels: true, forecast: true, regression: false, volume: true,
+};
+
 type AiTake = { summary: string; risk: string; drivers: string[] };
 
 type Computed = {
@@ -64,6 +82,7 @@ type Computed = {
   sma20: number[];
   sma50: number[];
   ema20: number[];
+  ema50: number[];
   bandUpper: number[];
   bandLower: number[];
   rsi: ReturnType<typeof rsiCalc>;
@@ -81,6 +100,7 @@ function computeAll(prices: number[], candles: Candle[]): Computed {
   const sma20 = smaLine(prices, 20);
   const sma50 = smaLine(prices, 50);
   const ema20 = ema(prices, 20).line;
+  const ema50 = ema(prices, 50).line;
   // Rolling 2σ Bollinger band series
   const bandUpper: number[] = [];
   const bandLower: number[] = [];
@@ -105,7 +125,8 @@ function computeAll(prices: number[], candles: Candle[]): Computed {
   const patterns = detectPatterns(prices);
   const vol = volatility(prices);
   const reg = linearRegression(prices, 7);
-  const forecast = ensembleForecast(prices, 7);
+  const timestamps = candles.map((c) => c.time);
+  const forecast = ensembleForecast(prices, 7, timestamps);
   const last = prices[prices.length - 1];
   const bu = bandUpper[bandUpper.length - 1];
   const bl = bandLower[bandLower.length - 1];
@@ -114,12 +135,13 @@ function computeAll(prices: number[], candles: Candle[]): Computed {
     prices,
     rsi: r.rsi,
     macd: m,
-    slope: reg.slope,
+    trendT: reg.tStat,
     bollPos,
     atr: a,
     ensembleTarget: forecast.ensemble[forecast.ensemble.length - 1],
+    forecastSigma: forecast.sigmaPath[forecast.sigmaPath.length - 1] ?? 0,
   });
-  return { prices, bars, sma20, sma50, ema20, bandUpper, bandLower, rsi: r, macd: m, atr: a, levels, patterns, vol, reg, forecast, score };
+  return { prices, bars, sma20, sma50, ema20, ema50, bandUpper, bandLower, rsi: r, macd: m, atr: a, levels, patterns, vol, reg, forecast, score };
 }
 
 export function QuantWorkbench() {
@@ -131,6 +153,7 @@ export function QuantWorkbench() {
   const [stage, setStage] = useState(0);
   const [ai, setAi] = useState<AiTake | null>(null);
   const [aiState, setAiState] = useState<"idle" | "loading" | "done" | "off">("idle");
+  const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>(DEFAULT_TOGGLES);
 
   const inst = lookupInstrument(symbol);
   const isIndex = symbol === "NIFTY50" || symbol.startsWith("^");
@@ -153,7 +176,11 @@ export function QuantWorkbench() {
         setCandles(list);
       } else {
         const prices = fallbackSeries(symbol.length, isIndex ? 24000 : 1500);
-        setCandles(prices.map((p, i) => ({ time: i, price: p })));
+        // Synthetic series still needs REAL calendar timestamps: `time: i`
+        // rendered as 1 Jan 1970 on the axis and broke weekday seasonality.
+        const dayMs = 86_400_000;
+        const t0 = Date.now() - (prices.length - 1) * dayMs;
+        setCandles(prices.map((p, i) => ({ time: t0 + i * dayMs, price: p })));
       }
     });
     return () => {
@@ -165,6 +192,40 @@ export function QuantWorkbench() {
     if (!candles) return null;
     return computeAll(candles.map((c) => c.price), candles);
   }, [candles]);
+
+  // Chart inputs are memoised separately from `computed` so that toggling an
+  // overlay re-renders the SVG without recomputing any of the quant pipeline.
+  const chartBars = useMemo<ChartBar[]>(
+    () =>
+      (candles ?? []).map((c) => ({
+        time: c.time,
+        close: c.price,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        volume: c.volume,
+      })),
+    [candles],
+  );
+
+  const chartOverlays = useMemo<Overlays>(
+    () =>
+      computed
+        ? {
+            sma20: computed.sma20,
+            sma50: computed.sma50,
+            ema20: computed.ema20,
+            ema50: computed.ema50,
+            bandUpper: computed.bandUpper,
+            bandLower: computed.bandLower,
+            regression: computed.reg.fitted,
+            rsi: computed.rsi.line,
+            macdHist: computed.macd.hist,
+            atrPct: computed.atr?.pct,
+          }
+        : {},
+    [computed],
+  );
 
   // Advance pipeline stages with a beat between each
   useEffect(() => {
@@ -358,15 +419,44 @@ Return JSON only: {"summary": "2-3 plain-English sentences a beginner understand
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-[14px] font-semibold tracking-tight">{label}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-(--color-fg-muted)">
-                <Legend color="#115e3c" label="Close" />
-                <Legend color="#3d9a6b" label="SMA 20" />
-                <Legend color="#8a63d2" label="SMA 50" />
-                <Legend color="#6fb98e" label="Bollinger 2σ" dashed />
-                <Legend color="#b27a00" label="Ensemble forecast" dashed />
-                <Legend color="#1d6fb8" label="Support/Resistance" dashed />
+                <Legend color="var(--color-brand-700)" label="Close" />
+                {toggles.sma20 && <Legend color="var(--color-brand-400)" label="SMA 20" />}
+                {toggles.sma50 && <Legend color="#8a63d2" label="SMA 50" />}
+                {toggles.bollinger && <Legend color="var(--color-brand-400)" label="Bollinger 2σ" dashed />}
+                {toggles.forecast && <Legend color="var(--color-warn)" label="Forecast · 95% CI" dashed />}
               </div>
             </div>
-            <MainChart computed={computed} unit={unit} showForecast={stage >= 3} />
+
+            {/* indicator toggles */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {TOGGLE_DEFS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  aria-pressed={toggles[t.key]}
+                  onClick={() => setToggles((s) => ({ ...s, [t.key]: !s[t.key] }))}
+                  className={cn(
+                    "rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    toggles[t.key]
+                      ? "border-(--color-brand-300) bg-(--color-brand-50) text-(--color-brand-700)"
+                      : "border-(--color-border) text-(--color-fg-subtle) hover:bg-(--color-surface-2)",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3">
+              <PriceChartPro
+                bars={chartBars}
+                overlays={chartOverlays}
+                levels={computed.levels}
+                forecast={computed.forecast}
+                unit={unit}
+                enabled={{ ...toggles, forecast: toggles.forecast && stage >= 3 }}
+              />
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -405,16 +495,20 @@ Return JSON only: {"summary": "2-3 plain-English sentences a beginner understand
               {computed.levels ? (
                 <div className="space-y-1 font-mono text-[12px]">
                   {computed.levels.resistances.map((r, i) => (
-                    <p key={`r${i}`} className="text-(--color-down)">
-                      R{i + 1} {unit}
-                      {fmt(r)}
+                    <p key={`r${i}`} className="flex items-center gap-2 text-(--color-down)">
+                      <span>R{i + 1} {unit}{fmt(r.price)}</span>
+                      <span className="text-[10px] text-(--color-fg-subtle)">
+                        {r.touches} touch{r.touches === 1 ? "" : "es"}
+                      </span>
                     </p>
                   ))}
                   <p className="text-(--color-fg-muted)">P&nbsp;&nbsp;{unit}{fmt(computed.levels.pivot.p)}</p>
                   {computed.levels.supports.map((s, i) => (
-                    <p key={`s${i}`} className="text-(--color-up)">
-                      S{i + 1} {unit}
-                      {fmt(s)}
+                    <p key={`s${i}`} className="flex items-center gap-2 text-(--color-up)">
+                      <span>S{i + 1} {unit}{fmt(s.price)}</span>
+                      <span className="text-[10px] text-(--color-fg-subtle)">
+                        {s.touches} touch{s.touches === 1 ? "" : "es"}
+                      </span>
                     </p>
                   ))}
                 </div>
@@ -502,13 +596,24 @@ Return JSON only: {"summary": "2-3 plain-English sentences a beginner understand
                     <p className="text-[12.5px] font-medium">{c.label}</p>
                     <p className="truncate font-mono text-[10.5px] text-(--color-fg-subtle)">{c.why}</p>
                   </div>
-                  <p className="shrink-0 font-mono text-[12px] font-semibold tabular">
-                    {c.points}/{c.max}
+                  <p
+                    className={cn(
+                      "shrink-0 font-mono text-[12px] font-semibold tabular",
+                      c.z > 0.15 ? "text-(--color-up)" : c.z < -0.15 ? "text-(--color-down)" : "text-(--color-fg-muted)",
+                    )}
+                    title={`z = ${fmt(c.z, 2)} × weight ${c.weight} = ${fmt(c.contribution, 3)}`}
+                  >
+                    {c.z >= 0 ? "+" : ""}
+                    {fmt(c.z, 2)}σ
+                    <span className="ml-1 text-[10px] font-normal text-(--color-fg-subtle)">
+                      ×{c.weight}
+                    </span>
                   </p>
                 </div>
               ))}
               <p className="pt-1 text-right font-mono text-[11.5px] text-(--color-fg-muted)">
-                total {computed.score.totalPoints}/{computed.score.maxPoints} → {computed.score.score}/100
+                composite Z = {fmt(computed.score.compositeZ, 3)} → Φ(Z) ={" "}
+                {computed.score.score}/100
               </p>
             </div>
           </div>
@@ -650,100 +755,6 @@ function ScoreMeter({ score }: { score: BullBearScore }) {
         <span>50</span>
         <span>100 Bullish</span>
       </div>
-    </div>
-  );
-}
-
-function MainChart({ computed, unit, showForecast }: { computed: Computed; unit: string; showForecast: boolean }) {
-  const W = 980;
-  const H = 400;
-  const pad = { l: 6, r: 10, t: 14, b: 18 };
-  const prices = computed.prices;
-  const f = computed.forecast;
-  const horizon = showForecast ? f.horizon : 0;
-
-  const allVals = [
-    ...prices,
-    ...computed.bandUpper.filter((v) => !isNaN(v)),
-    ...computed.bandLower.filter((v) => !isNaN(v)),
-    ...(showForecast ? [...f.upper, ...f.lower] : []),
-    ...(computed.levels ? [...computed.levels.supports, ...computed.levels.resistances] : []),
-  ];
-  const min = Math.min(...allVals);
-  const max = Math.max(...allVals);
-  const span = max - min || 1;
-  const total = prices.length + horizon;
-
-  const xAt = (i: number) => pad.l + (i / (total - 1)) * (W - pad.l - pad.r);
-  const yAt = (v: number) => pad.t + (1 - (v - min) / span) * (H - pad.t - pad.b);
-
-  const linePath = (vals: number[], offset = 0) =>
-    vals
-      .map((v, i) => (isNaN(v) ? null : `${xAt(i + offset).toFixed(1)},${yAt(v).toFixed(1)}`))
-      .map((p, i, arr) => (p === null ? "" : `${i === 0 || arr[i - 1] === null ? "M" : "L"}${p}`))
-      .join(" ");
-
-  const pricePath = linePath(prices);
-  const sma20Path = linePath(computed.sma20);
-  const sma50Path = linePath(computed.sma50);
-
-  // Bollinger polygon
-  const bandPts: string[] = [];
-  for (let i = 0; i < prices.length; i++) if (!isNaN(computed.bandUpper[i])) bandPts.push(`${xAt(i).toFixed(1)},${yAt(computed.bandUpper[i]).toFixed(1)}`);
-  for (let i = prices.length - 1; i >= 0; i--) if (!isNaN(computed.bandLower[i])) bandPts.push(`${xAt(i).toFixed(1)},${yAt(computed.bandLower[i]).toFixed(1)}`);
-  const bandPolygon = bandPts.join(" ");
-
-  // Forecast cone
-  const lastIdx = prices.length - 1;
-  let conePolygon = "";
-  let ensemblePath = "";
-  if (showForecast) {
-    const up = [`${xAt(lastIdx).toFixed(1)},${yAt(prices[lastIdx]).toFixed(1)}`, ...f.upper.map((v, h) => `${xAt(lastIdx + 1 + h).toFixed(1)},${yAt(v).toFixed(1)}`)];
-    const down = [...f.lower.map((v, h) => `${xAt(lastIdx + 1 + h).toFixed(1)},${yAt(v).toFixed(1)}`).reverse(), `${xAt(lastIdx).toFixed(1)},${yAt(prices[lastIdx]).toFixed(1)}`];
-    conePolygon = [...up, ...down].join(" ");
-    ensemblePath = `M${xAt(lastIdx).toFixed(1)},${yAt(prices[lastIdx]).toFixed(1)} ` + f.ensemble.map((v, h) => `L${xAt(lastIdx + 1 + h).toFixed(1)},${yAt(v).toFixed(1)}`).join(" ");
-  }
-
-  return (
-    <div className="reveal reveal-shown mt-4">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-[300px] w-full sm:h-[400px]" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="mc-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#115e3c" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#115e3c" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {bandPolygon && <polygon points={bandPolygon} fill="#6fb98e" opacity="0.09" stroke="#6fb98e" strokeOpacity="0.35" strokeWidth="0.6" strokeDasharray="4 4" />}
-
-        {/* S/R levels */}
-        {computed.levels?.resistances.map((r, i) => (
-          <g key={`r${i}`}>
-            <line x1={pad.l} x2={W - pad.r} y1={yAt(r)} y2={yAt(r)} stroke="#1d6fb8" strokeWidth="1" strokeDasharray="6 5" opacity="0.5" />
-            <text x={W - pad.r - 4} y={yAt(r) - 4} textAnchor="end" fontSize="10" fill="#1d6fb8">R{i + 1} {unit}{fmt(r, 0)}</text>
-          </g>
-        ))}
-        {computed.levels?.supports.map((s, i) => (
-          <g key={`s${i}`}>
-            <line x1={pad.l} x2={W - pad.r} y1={yAt(s)} y2={yAt(s)} stroke="#1d6fb8" strokeWidth="1" strokeDasharray="6 5" opacity="0.5" />
-            <text x={W - pad.r - 4} y={yAt(s) + 11} textAnchor="end" fontSize="10" fill="#1d6fb8">S{i + 1} {unit}{fmt(s, 0)}</text>
-          </g>
-        ))}
-
-        <path d={`${pricePath} L${xAt(lastIdx).toFixed(1)},${H - pad.b} L${xAt(0).toFixed(1)},${H - pad.b} Z`} fill="url(#mc-fill)" />
-        <path d={pricePath} fill="none" stroke="#115e3c" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" pathLength={1} className="spark-line" />
-        {sma20Path && <path d={sma20Path} fill="none" stroke="#3d9a6b" strokeWidth="1.5" strokeLinejoin="round" />}
-        {sma50Path && <path d={sma50Path} fill="none" stroke="#8a63d2" strokeWidth="1.5" strokeLinejoin="round" />}
-
-        {showForecast && conePolygon && <polygon points={conePolygon} fill="#b27a00" opacity="0.1" />}
-        {showForecast && ensemblePath && <path d={ensemblePath} fill="none" stroke="#b27a00" strokeWidth="2" strokeDasharray="5 5" strokeLinejoin="round" />}
-
-        <circle cx={xAt(lastIdx)} cy={yAt(prices[lastIdx])} r="3.5" fill="#115e3c" />
-        <text x={xAt(lastIdx) - 6} y={yAt(prices[lastIdx]) - 10} textAnchor="end" fontSize="12" fontWeight="600" fill="#0d1f17">
-          {unit}
-          {fmt(prices[lastIdx])}
-        </text>
-      </svg>
     </div>
   );
 }

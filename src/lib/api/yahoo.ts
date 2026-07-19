@@ -28,11 +28,14 @@ export type Quote = {
 };
 
 export type Candle = {
+  /** Epoch MILLISECONDS (Yahoo sends seconds; parseChart multiplies by 1000).
+   *  Consumers should use `new Date(time)` directly — never `time * 1000`. */
   time: number;
   price: number; // close
   open?: number;
   high?: number;
   low?: number;
+  volume?: number;
 };
 
 export type ChartRange = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y";
@@ -106,6 +109,7 @@ type YahooChartResult = {
       open?: (number | null)[];
       high?: (number | null)[];
       low?: (number | null)[];
+      volume?: (number | null)[];
     }>;
   };
 };
@@ -139,6 +143,7 @@ function parseChart(symbol: string, result: YahooChartResult): { quote: Quote; c
   const opens = q0.open ?? [];
   const highs = q0.high ?? [];
   const lows = q0.low ?? [];
+  const volumes = q0.volume ?? [];
   const candles: Candle[] = [];
   for (let i = 0; i < ts.length; i++) {
     const c = closes[i];
@@ -149,6 +154,7 @@ function parseChart(symbol: string, result: YahooChartResult): { quote: Quote; c
       open: opens[i] ?? undefined,
       high: highs[i] ?? undefined,
       low: lows[i] ?? undefined,
+      volume: volumes[i] ?? undefined,
     });
   }
   return { quote, candles };
