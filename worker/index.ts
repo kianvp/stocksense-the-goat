@@ -113,6 +113,7 @@ const GATED_PREFIXES = [
   "/recently-viewed",
   "/quote",
   "/quant",
+  "/research",
   "/admin",
 ];
 

@@ -38,4 +38,5 @@ export const GATED_ROUTES = [
   "/recently-viewed",
   "/quote",
   "/quant",
+  "/research",
 ];

@@ -13,6 +13,7 @@ import {
   Bookmark,
   Newspaper,
   Bot,
+  Radar,
   Sigma,
   BookOpen,
   History,
@@ -38,6 +39,7 @@ const PRIMARY = [
 
 const SECONDARY = [
   { href: "/ask-ai", label: "Ask AI", icon: Bot, badge: "AI" },
+  { href: "/research", label: "Deep Research", icon: Radar, badge: "AI" },
   { href: "/quant", label: "Quant Engine", icon: Sigma, badge: "MATH" },
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/glossary", label: "Glossary", icon: BookOpen },

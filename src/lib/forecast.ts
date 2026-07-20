@@ -16,8 +16,24 @@ export type ModelForecast = {
   target: number; // last point of path
   /** Walk-forward one-step RMSE (in price units); lower is better. */
   rmse?: number;
+  /** Walk-forward mean absolute error (price units). */
+  mae?: number;
+  /** Walk-forward mean absolute percentage error, as a fraction. */
+  mape?: number;
+  /** Share of walk-forward origins where the predicted direction was right. */
+  dirAcc?: number;
   /** Ensemble weight actually applied, ∝ 1/MSE. */
   weight?: number;
+};
+
+/** Diagnostics for the random-walk baseline the models must beat. */
+export type BaselineDiagnostics = {
+  rmse: number;
+  mae: number;
+  mape: number;
+  /** Directional accuracy of the majority-class ("always up") guess. */
+  dirAcc: number;
+  n: number;
 };
 
 export type EnsembleForecast = {
@@ -275,29 +291,66 @@ function fitAll(prices: number[], horizon: number, timestamps?: number[]): Model
  * out-of-sample error — no look-ahead — and it's what earns each model its
  * ensemble weight.
  */
-function backtestRmse(
+export function backtestDiagnostics(
   prices: number[],
   timestamps: number[] | undefined,
   origins = 24,
-): { rmse: number[]; n: number } {
+): {
+  rmse: number[];
+  mae: number[];
+  mape: number[];
+  dirAcc: number[];
+  baseline: BaselineDiagnostics;
+  n: number;
+} {
   const minTrain = 40;
   const start = Math.max(minTrain, prices.length - origins);
-  if (prices.length - start < 5) return { rmse: [0, 0, 0], n: 0 };
+  const empty: BaselineDiagnostics = { rmse: 0, mae: 0, mape: 0, dirAcc: 0, n: 0 };
+  if (prices.length - start < 5) {
+    return { rmse: [0, 0, 0], mae: [0, 0, 0], mape: [0, 0, 0], dirAcc: [0, 0, 0], baseline: empty, n: 0 };
+  }
 
   const se = [0, 0, 0];
+  const ae = [0, 0, 0];
+  const ape = [0, 0, 0];
+  const dirHit = [0, 0, 0];
+  // Random walk (P̂ₜ₊₁ = Pₜ) for the error metrics; "always up" (the majority
+  // class in equity series) for direction — a flat guess has no direction.
+  let bSe = 0, bAe = 0, bApe = 0, bDir = 0;
   let n = 0;
+
   for (let t = start; t < prices.length; t++) {
     const train = prices.slice(0, t);
     const ts = timestamps?.slice(0, t);
     const actual = prices[t];
+    const prev = train[train.length - 1];
     const preds = fitAll(train, 1, ts);
     for (let m = 0; m < preds.length; m++) {
-      const e = preds[m].path[0] - actual;
-      if (isFinite(e)) se[m] += e * e;
+      const p = preds[m].path[0];
+      const e = p - actual;
+      if (!isFinite(e)) continue;
+      se[m] += e * e;
+      ae[m] += Math.abs(e);
+      if (actual !== 0) ape[m] += Math.abs(e / actual);
+      if ((p - prev) * (actual - prev) > 0) dirHit[m]++;
     }
+    const be = prev - actual;
+    bSe += be * be;
+    bAe += Math.abs(be);
+    if (actual !== 0) bApe += Math.abs(be / actual);
+    if (actual > prev) bDir++;
     n++;
   }
-  return { rmse: se.map((s) => Math.sqrt(s / Math.max(1, n))), n };
+
+  const div = Math.max(1, n);
+  return {
+    rmse: se.map((s) => Math.sqrt(s / div)),
+    mae: ae.map((s) => s / div),
+    mape: ape.map((s) => s / div),
+    dirAcc: dirHit.map((s) => s / div),
+    baseline: { rmse: Math.sqrt(bSe / div), mae: bAe / div, mape: bApe / div, dirAcc: bDir / div, n },
+    n,
+  };
 }
 
 /**
@@ -329,13 +382,17 @@ export function ensembleForecast(
   const models = fitAll(prices, horizon, timestamps);
 
   // Accuracy-weighted combination.
-  const { rmse, n: backtestN } = backtestRmse(prices, timestamps);
+  const diag = backtestDiagnostics(prices, timestamps);
+  const { rmse, n: backtestN } = diag;
   const usable = backtestN > 0 && rmse.every((r) => isFinite(r) && r > 0);
   const rawWeights = usable ? rmse.map((r) => 1 / (r * r)) : models.map(() => 1);
   const wSum = rawWeights.reduce((a, b) => a + b, 0);
   const weights = rawWeights.map((w) => w / wSum);
   models.forEach((m, i) => {
     m.rmse = usable ? rmse[i] : undefined;
+    m.mae = usable ? diag.mae[i] : undefined;
+    m.mape = usable ? diag.mape[i] : undefined;
+    m.dirAcc = usable ? diag.dirAcc[i] : undefined;
     m.weight = weights[i];
   });
 
