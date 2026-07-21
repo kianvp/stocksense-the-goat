@@ -33,7 +33,19 @@ interface Env {
   DB?: D1Database;
   /** Comma-separated emails allowed to read /__admin/users. Unset = nobody. */
   ADMIN_EMAILS?: string;
+  /**
+   * Server-side API keys. These are the SECRET counterparts of the old
+   * NEXT_PUBLIC_* build vars — set them as dashboard Secrets so the keys never
+   * ship in the client bundle where anyone could scrape and drain them.
+   * Optional: if unset, /__ai answers 501 and the app degrades to
+   * deterministic-only analysis.
+   */
+  GEMINI_KEY?: string;
+  FINNHUB_KEY?: string;
 }
+
+/** Gemini models the AI proxy is allowed to call (prevents open relay). */
+const GEMINI_MODELS = new Set(["gemini-2.5-flash", "gemini-2.5-flash-lite"]);
 
 const SESSION_COOKIE = "ss_session"; // HttpOnly, signed — the actual gate
 const IDENTITY_COOKIE = "ss_id"; // readable by the app so it knows who's in
@@ -56,9 +68,16 @@ export default {
       return logout(url);
     }
     // Same-origin market-data proxy (public): fetch Yahoo/Finnhub server-side so
-    // the browser isn't blocked by CORS or flaky third-party proxies.
+    // the browser isn't blocked by CORS or flaky third-party proxies. Also
+    // injects the Finnhub token so it stays server-side.
     if (url.pathname === "/__proxy") {
-      return handleProxy(url);
+      return handleProxy(url, env);
+    }
+
+    // Server-side AI proxy: holds the Gemini key so it never reaches the
+    // browser. Requires a signed-in session — only members may spend the key.
+    if (url.pathname === "/__ai") {
+      return handleAi(request, env);
     }
 
     // Admin API — signed-in AND on the ADMIN_EMAILS allowlist.
@@ -336,7 +355,52 @@ const PROXY_HOSTS = new Set([
   "finnhub.io",
 ]);
 
-async function handleProxy(url: URL): Promise<Response> {
+/* ----------------------------------------------------------- AI proxy */
+
+/**
+ * Server-side Gemini proxy. The client sends the exact generateContent body;
+ * this adds the secret key and forwards to the chosen (allowlisted) model,
+ * passing the upstream status and body straight back so the client's own
+ * quota/backoff/model-fallback logic keeps working. Members only — an
+ * anonymous visitor can't spend the key.
+ */
+async function handleAi(request: Request, env: Env): Promise<Response> {
+  // Capability probe: lets the UI show an accurate "AI configured?" banner
+  // without spending any quota.
+  if (request.method === "GET") {
+    const session = await getValidSession(request, env);
+    if (!session) return json({ error: "unauthorized" }, 401);
+    return json({ configured: !!env.GEMINI_KEY });
+  }
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+
+  const session = await getValidSession(request, env);
+  if (!session) return json({ error: "unauthorized" }, 401);
+  if (!env.GEMINI_KEY) return json({ error: "AI is not configured on the server" }, 501);
+
+  const url = new URL(request.url);
+  const model = url.searchParams.get("model") || "gemini-2.5-flash";
+  if (!GEMINI_MODELS.has(model)) return json({ error: "model not allowed" }, 400);
+
+  const body = await request.text();
+  if (body.length > 200_000) return json({ error: "payload too large" }, 413);
+
+  try {
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(env.GEMINI_KEY)}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body },
+    );
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  } catch (e) {
+    return json({ error: "upstream error: " + (e instanceof Error ? e.message : String(e)) }, 502);
+  }
+}
+
+async function handleProxy(url: URL, env: Env): Promise<Response> {
   const target = url.searchParams.get("u");
   if (!target) return new Response("missing u", { status: 400 });
   let t: URL;
@@ -347,6 +411,11 @@ async function handleProxy(url: URL): Promise<Response> {
   }
   if (t.protocol !== "https:" || !PROXY_HOSTS.has(t.hostname)) {
     return new Response("host not allowed", { status: 403 });
+  }
+  // Finnhub needs a token. Inject it server-side so it never ships in the
+  // client bundle; the client sends the URL without one.
+  if (t.hostname === "finnhub.io" && env.FINNHUB_KEY && !t.searchParams.get("token")) {
+    t.searchParams.set("token", env.FINNHUB_KEY);
   }
   try {
     const upstream = await fetch(t.toString(), {

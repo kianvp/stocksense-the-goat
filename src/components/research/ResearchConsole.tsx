@@ -7,12 +7,12 @@
 // runner, not a scripted animation. After the run settles, the report renders
 // from the assembled ResearchReport object.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Radar, Play, ShieldAlert, Scale as ScaleIcon, TrendingUp, TrendingDown,
   Gauge, Newspaper, User, Clock, CheckCircle2, XCircle, MinusCircle, Zap,
 } from "lucide-react";
-import { hasGeminiKey } from "@/lib/api/gemini";
+import { checkAiConfigured } from "@/lib/api/gemini";
 import { searchUniverse, lookupInstrument } from "@/lib/universe";
 import { fmt } from "@/lib/quant";
 import { routeIntent } from "@/lib/research/agents";
@@ -74,7 +74,13 @@ export function ResearchConsole() {
   const [nodes, setNodes] = useState<Record<string, NodeState>>({});
   const [report, setReport] = useState<ResearchReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null = still probing; true/false = server AI key present. Quota-free check.
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const runningRef = useRef(false);
+
+  useEffect(() => {
+    checkAiConfigured().then(setAiConfigured);
+  }, []);
 
   const suggestions = useMemo(
     () => (query.trim() && !lookupInstrument(query.toUpperCase()) ? searchUniverse(query, 4) : []),
@@ -133,9 +139,9 @@ export function ResearchConsole() {
         </p>
       </div>
 
-      {!hasGeminiKey() && (
+      {aiConfigured === false && (
         <div className="mb-4 rounded-xl border border-(--color-warn)/40 bg-(--color-warn)/5 px-4 py-3 text-[13px] text-(--color-fg-muted)">
-          <span className="font-semibold text-(--color-warn)">Gemini key not configured</span> — the
+          <span className="font-semibold text-(--color-warn)">AI key not configured on the server</span> — the
           quantitative layers will run; analyst, debate and moderator stages will be skipped.
         </div>
       )}

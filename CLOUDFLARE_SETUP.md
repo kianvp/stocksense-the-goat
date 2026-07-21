@@ -25,14 +25,23 @@ make sure the deploy command is `npx wrangler deploy`.
 
 1. **Project → Settings → Variables and Secrets** — add (type: *Secret* for the
    secret ones):
-   | Name | Value |
-   | --- | --- |
-   | `GOOGLE_CLIENT_ID` | your Google OAuth client ID (ends `.apps.googleusercontent.com`) |
-   | `SESSION_SECRET` | a long random string — e.g. run `openssl rand -hex 32` |
-   | `ALLOWED_EMAILS` | *(optional)* comma-separated emails allowed in; leave unset to allow any Google account |
+   | Name | Type | Value |
+   | --- | --- | --- |
+   | `GOOGLE_CLIENT_ID` | Var | your Google OAuth client ID (ends `.apps.googleusercontent.com`) |
+   | `SESSION_SECRET` | Secret | a long random string — e.g. run `openssl rand -hex 32` |
+   | `GEMINI_KEY` | **Secret** | your Gemini API key (server-side; powers Ask AI + Deep Research) |
+   | `FINNHUB_KEY` | **Secret** | your Finnhub API key (server-side; powers market news) |
+   | `ALLOWED_EMAILS` | Secret | *(optional)* comma-separated emails allowed in; unset = any Google account |
+   | `ADMIN_EMAILS` | Secret | *(optional)* comma-separated emails allowed to see `/admin` |
 
-   > These are **runtime** Worker variables (used by `worker/index.ts`), separate
-   > from the `NEXT_PUBLIC_*` **build** variables the site's JS uses. Keep both.
+   > **Key hygiene — important.** `GEMINI_KEY` and `FINNHUB_KEY` are now held
+   > **server-side** by the Worker (`/__ai` and `/__proxy`) and are never sent to
+   > the browser. Do **NOT** set `NEXT_PUBLIC_GEMINI_KEY` or
+   > `NEXT_PUBLIC_FINNHUB_KEY` as Cloudflare **build** variables any more —
+   > anything `NEXT_PUBLIC_*` is inlined into the public JS bundle where it can be
+   > scraped and drained. Those two `NEXT_PUBLIC_*` keys belong only in your local
+   > `.env.local` (gitignored) for `next dev`. If you set them earlier as build
+   > variables, delete them under *Settings → Build → Variables*.
 
 2. **Settings → Build**
    - Build command: `npm run build`
