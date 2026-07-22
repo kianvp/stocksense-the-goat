@@ -14,8 +14,13 @@
 // in the Worker (/__ai) as a server-side Secret.
 const LOCAL_KEY =
   process.env.NODE_ENV !== "production" ? process.env.NEXT_PUBLIC_GEMINI_KEY : undefined;
-const PRIMARY_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.5-flash-lite"; // separate free-tier quota pool
+// "-latest" aliases (not pinned versions) so a model retirement — e.g. the
+// 2.5 line being sunset — can't silently 404 us the way gemini-2.5-flash-lite
+// did. Primary is full flash; fallback is the lighter lite model, which draws
+// on a SEPARATE per-model free-tier daily quota, so it still answers when the
+// primary's daily quota is spent.
+const PRIMARY_MODEL = "gemini-flash-latest";
+const FALLBACK_MODEL = "gemini-flash-lite-latest";
 const googleEndpoint = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -27,10 +32,12 @@ type GenerateOptions = {
   responseJson?: boolean;
   temperature?: number;
   /**
-   * Gemini 2.5 thinking budget in tokens. 0 disables thinking — right for
-   * pipeline calls where deterministic code already did the maths and the
-   * model only interprets; leaving it undefined keeps the model default
-   * (chat features keep their existing behaviour).
+   * Thinking control for pipeline calls where deterministic code already did
+   * the maths and the model only interprets. 0 means "think as little as
+   * possible": current 3.x flash models reject a literal budget of 0, so it is
+   * mapped to thinkingLevel:"low" (their nearest equivalent). A positive value
+   * is passed through as an explicit token budget. Undefined keeps the model
+   * default (chat features keep their existing behaviour).
    */
   thinkingBudget?: number;
 };
@@ -178,7 +185,12 @@ export async function generate(
       temperature: opts.temperature ?? 0.6,
       ...(opts.responseJson ? { responseMimeType: "application/json" } : {}),
       ...(opts.thinkingBudget !== undefined
-        ? { thinkingConfig: { thinkingBudget: opts.thinkingBudget } }
+        ? {
+            thinkingConfig:
+              opts.thinkingBudget === 0
+                ? { thinkingLevel: "low" } // 3.x can't hard-disable thinking; "low" is the floor
+                : { thinkingBudget: opts.thinkingBudget },
+          }
         : {}),
     },
     ...(opts.system ? { systemInstruction: { role: "system", parts: [{ text: opts.system }] } } : {}),

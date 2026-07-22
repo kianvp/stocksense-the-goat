@@ -45,7 +45,7 @@ interface Env {
 }
 
 /** Gemini models the AI proxy is allowed to call (prevents open relay). */
-const GEMINI_MODELS = new Set(["gemini-2.5-flash", "gemini-2.5-flash-lite"]);
+const GEMINI_MODELS = new Set(["gemini-flash-latest", "gemini-flash-lite-latest"]);
 
 const SESSION_COOKIE = "ss_session"; // HttpOnly, signed — the actual gate
 const IDENTITY_COOKIE = "ss_id"; // readable by the app so it knows who's in
